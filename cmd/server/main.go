@@ -18,6 +18,9 @@ func main() {
 	godotenv.Load() // ignore error if .env not present
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("configuration error: %v", err)
+	}
 	client := openrouter.New(cfg.OpenRouterAPIKey)
 	c := council.New(client, cfg.CouncilModels, cfg.ChairmanModel)
 	store := storage.New(cfg.DataDir)

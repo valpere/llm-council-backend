@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -11,6 +12,19 @@ type Config struct {
 	ChairmanModel    string
 	DataDir          string
 	Port             string
+}
+
+func (c *Config) Validate() error {
+	if c.OpenRouterAPIKey == "" {
+		return fmt.Errorf("OPENROUTER_API_KEY is required but not set")
+	}
+	if len(c.CouncilModels) == 0 {
+		return fmt.Errorf("COUNCIL_MODELS must contain at least one model")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("PORT must not be empty")
+	}
+	return nil
 }
 
 func Load() *Config {
