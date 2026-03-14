@@ -39,6 +39,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Add("Vary", "Origin")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -94,6 +95,7 @@ func (h *Handler) getConversation(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB
 	var req struct {
 		Content string `json:"content"`
 	}
@@ -118,16 +120,23 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Start title generation concurrently so it doesn't block RunFull.
+	var titleCh chan string
 	if isFirst {
-		if err := h.store.UpdateTitle(id, h.council.GenerateTitle(r.Context(), req.Content)); err != nil {
-			log.Printf("sendMessage: UpdateTitle %s: %v", id, err)
-		}
+		titleCh = make(chan string, 1)
+		go func() { titleCh <- h.council.GenerateTitle(r.Context(), req.Content) }()
 	}
 
 	result, err := h.council.RunFull(r.Context(), req.Content)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	if isFirst {
+		if err := h.store.UpdateTitle(id, <-titleCh); err != nil {
+			log.Printf("sendMessage: UpdateTitle %s: %v", id, err)
+		}
 	}
 
 	if err := h.store.AddMessage(id, map[string]any{
@@ -146,6 +155,7 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB
 	var req struct {
 		Content string `json:"content"`
 	}
@@ -178,7 +188,13 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	send := func(v any) {
-		data, _ := json.Marshal(v)
+		data, err := json.Marshal(v)
+		if err != nil {
+			log.Printf("sendMessageStream: json.Marshal: %v", err)
+			fmt.Fprintf(w, "data: {\"type\":\"error\",\"message\":\"internal serialization error\"}\n\n")
+			flusher.Flush()
+			return
+		}
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
 	}

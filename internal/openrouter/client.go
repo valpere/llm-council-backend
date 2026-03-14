@@ -67,7 +67,7 @@ func (c *Client) QueryModel(ctx context.Context, model string, messages []Messag
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10)) // cap at 64KB
 		return nil, fmt.Errorf("openrouter error %d: %s", resp.StatusCode, string(data))
 	}
 

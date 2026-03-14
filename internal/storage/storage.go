@@ -32,7 +32,7 @@ var validID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 type Store struct {
 	dataDir string
-	locks   sync.Map // map[string]*sync.Mutex — per-conversation write lock
+	locks   sync.Map // map[string]*sync.Mutex — per-conversation write lock; grows with conversation count (one entry per UUID, pointer-sized — acceptable for typical usage)
 }
 
 func New(dataDir string) *Store {
@@ -40,7 +40,7 @@ func New(dataDir string) *Store {
 }
 
 func (s *Store) ensureDir() error {
-	return os.MkdirAll(s.dataDir, 0755)
+	return os.MkdirAll(s.dataDir, 0700)
 }
 
 func (s *Store) path(id string) string {
@@ -96,7 +96,7 @@ func (s *Store) save(conv *Conversation) error {
 		return err
 	}
 	tmpPath := s.path(conv.ID) + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmpPath, s.path(conv.ID))

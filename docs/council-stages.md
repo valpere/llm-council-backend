@@ -22,7 +22,7 @@ Responses from Stage 1 are presented to all council models anonymously. Each mod
 4. Parse rankings from each response using regex
 5. Compute aggregate rankings (average position per model)
 
-**Output:** `[]StageTwoResult{Model, RankingText, ParsedRanking}` + `labelToModel` map + `aggregateRankings`
+**Output:** `[]StageTwoResult{Model, Ranking, ParsedRanking}` + `labelToModel` map + `aggregateRankings`
 
 ### Ranking Prompt Format
 
