@@ -21,10 +21,10 @@ type Client struct {
 func New(apiKey string) *Client {
 	return &Client{
 		apiKey: apiKey,
-		// 3-minute ceiling matches the longest per-query context timeout (120 s) plus
-		// connection/read overhead. Per-request deadlines via context.WithTimeout take
-		// effect first; this is a safety backstop against a hung connection.
-		httpClient: &http.Client{Timeout: 3 * time.Minute},
+		// 5-minute transport-level ceiling acts as a safety backstop against a hung
+		// connection. Per-request deadlines via context.WithTimeout (120 s) should
+		// normally fire first; this timeout only applies if something goes badly wrong.
+		httpClient: &http.Client{Timeout: 300 * time.Second},
 	}
 }
 

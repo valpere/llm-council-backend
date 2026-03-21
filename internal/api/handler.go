@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"llm-council/internal/council"
 	"llm-council/internal/storage"
@@ -122,11 +123,15 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start title generation concurrently so it doesn't block RunFull.
-	// Uses context.Background() so it completes even if the client disconnects.
+	// Detached from the request context so it completes even if the client disconnects.
 	var titleCh chan string
 	if isFirst {
 		titleCh = make(chan string, 1)
-		go func() { titleCh <- h.council.GenerateTitle(context.Background(), req.Content) }()
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			titleCh <- h.council.GenerateTitle(ctx, req.Content)
+		}()
 	}
 
 	result, err := h.council.RunFull(r.Context(), req.Content)
@@ -209,12 +214,14 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start title generation concurrently with Stage 1.
-	// Uses context.Background() so it completes even if the client disconnects.
+	// Detached from the request context so it completes even if the client disconnects.
 	type titleMsg struct{ title string }
 	titleCh := make(chan titleMsg, 1)
 	if isFirst {
 		go func() {
-			titleCh <- titleMsg{h.council.GenerateTitle(context.Background(), req.Content)}
+			tCtx, tCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer tCancel()
+			titleCh <- titleMsg{h.council.GenerateTitle(tCtx, req.Content)}
 		}()
 	}
 
