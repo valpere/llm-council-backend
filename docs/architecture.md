@@ -91,11 +91,25 @@ data: {"type":"complete"}
 
 This enables the frontend to display progressive updates rather than waiting for the full pipeline.
 
+### Interface-Driven Dependency Injection
+
+`council.Runner` and `storage.Storer` are interfaces defined near their consumers (`internal/council/interfaces.go` and `internal/storage/storage.go`). The HTTP handler depends only on these interfaces — never on concrete types. This makes handler tests possible without a real OpenRouter connection or real disk I/O.
+
+```
+Handler → council.Runner (interface) → *Council (concrete)
+Handler → storage.Storer (interface) → *Store (concrete)
+```
+
+The same pattern applies one layer down: `Council` depends on `council.LLMClient`, not on `*openrouter.Client`, so the LLM layer can be mocked independently.
+
 ### Graceful Degradation
 If a model query fails, the system continues with successful responses. Partial results are better than complete failure.
 
 ### Ephemeral Metadata
 The `label_to_model` mapping and `aggregate_rankings` are computed per-request and not persisted to storage. They are returned in the API response and used only for display.
+
+### Title Generation Parallelism
+Title generation (a separate cheap LLM call) starts concurrently with `RunFull()`. It uses a detached `context.Background()` — not the request context — so it completes even if the client disconnects, and is bounded by a 30-second timeout.
 
 ### JSON File Storage
 Conversations are stored as individual JSON files in `data/conversations/{uuid}.json`. No database setup required. Simple and transparent.

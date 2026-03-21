@@ -8,17 +8,20 @@ The original Python/FastAPI backend has been rewritten in Go. The frontend (Reac
 llm-council-backend/
 ├── cmd/
 │   └── server/
-│       └── main.go          # Entry point, server startup
+│       └── main.go          # Entry point, config validation, graceful shutdown
 ├── internal/
 │   ├── config/
-│   │   └── config.go        # Config struct, Load() from env
+│   │   └── config.go        # Config struct, Load() from env, Validate()
 │   ├── openrouter/
 │   │   └── client.go        # QueryModel(), QueryModelsParallel()
 │   ├── council/
-│   │   ├── council.go       # RunFull(), stage functions, CalculateAggregateRankings()
-│   │   └── types.go         # StageOneResult, StageTwoResult, etc.
+│   │   ├── interfaces.go    # LLMClient and Runner interfaces; compile-time checks
+│   │   ├── types.go         # StageOneResult, StageTwoResult, AggregateRanking, Result
+│   │   ├── prompts.go       # rankingPromptTemplate, chairmanPromptTemplate, titlePromptTemplate
+│   │   ├── council.go       # Council struct; stage functions; CalculateAggregateRankings
+│   │   └── council_test.go  # Unit tests for parseRankingFromText, CalculateAggregateRankings
 │   ├── storage/
-│   │   └── storage.go       # Create/Get/AddMessage/UpdateTitle/List
+│   │   └── storage.go       # Storer interface; Store struct; Create/Get/AddMessage/UpdateTitle/List
 │   └── api/
 │       └── handler.go       # HTTP handlers, CORS middleware, SSE streaming
 ├── data/
@@ -68,17 +71,48 @@ data: {"type":"title_complete","data":{"title":"..."}}
 data: {"type":"complete"}
 ```
 
+### Interfaces
+
+Two key interfaces defined in `internal/council/interfaces.go` enable testing without real LLM or storage calls:
+
+```go
+// LLMClient — implemented by openrouter.Client; mock it in tests.
+type LLMClient interface {
+    QueryModel(ctx, model, messages, timeout) (*Response, error)
+    QueryModelsParallel(ctx, models, messages, timeout) []ModelResult
+}
+
+// Runner — implemented by Council; inject a mock to test handlers.
+type Runner interface {
+    Stage1CollectResponses(ctx, query) ([]StageOneResult, error)
+    Stage2CollectRankings(ctx, query, stage1) ([]StageTwoResult, map[string]string, error)
+    Stage3SynthesizeFinal(ctx, query, stage1, stage2) (StageThreeResult, error)
+    GenerateTitle(ctx, query) string
+    RunFull(ctx, query) (Result, error)
+    CalculateAggregateRankings(stage2, labelToModel) []AggregateRanking
+}
+```
+
+`storage.Storer` (defined in `internal/storage/storage.go`) does the same for the persistence layer.
+
+Compile-time assertions in `interfaces.go` ensure concrete types satisfy their interfaces:
+```go
+var _ Runner = (*Council)(nil)
+var _ LLMClient = (*openrouter.Client)(nil)
+```
+
 ### Configuration
 
-Loaded from environment variables (`.env` via `godotenv`):
+Loaded from environment variables (`.env` via `godotenv`). Validated at startup — the process exits immediately if `OPENROUTER_API_KEY` is missing.
 
 ```go
 type Config struct {
     OpenRouterAPIKey string
-    CouncilModels    []string
-    ChairmanModel    string
-    DataDir          string
-    Port             string   // used as ":"+Port for http.ListenAndServe
+    CouncilModels    []string   // COUNCIL_MODELS — comma-separated; default: 4 models
+    ChairmanModel    string     // CHAIRMAN_MODEL — default: gemini-3-pro-preview
+    TitleModel       string     // TITLE_MODEL — default: gemini-2.5-flash
+    DataDir          string     // DATA_DIR — default: data/conversations
+    Port             string     // PORT — default: 8001
 }
 ```
 
@@ -90,13 +124,32 @@ Each conversation is a single JSON file at `data/conversations/{uuid}.json`.
 - Concurrent writes to the same conversation are serialized via a per-conversation `sync.Mutex`.
 - Conversation IDs are validated against a UUID regex before any file path is constructed, preventing directory traversal.
 
+### Title Generation
+
+Title generation runs in a goroutine started before `RunFull()` so it overlaps with the council pipeline:
+
+```go
+titleCh := make(chan string, 1)
+go func() {
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    titleCh <- h.council.GenerateTitle(ctx, req.Content)
+}()
+result, err := h.council.RunFull(r.Context(), req.Content)
+// ... then receive from titleCh
+```
+
+The goroutine uses `context.Background()` (not the request context) so it completes even if the client disconnects. A 30-second timeout bounds its lifetime.
+
 ### Error Handling
 
 - Model query failures are logged; the caller skips failed results
 - If all models fail in Stage 1, a descriptive error response is returned to the user
 - If some models fail, the pipeline continues with successful responses
+- `Stage3SynthesizeFinal` returns an error (not an embedded error string) if the chairman call fails
 - Title generation failure is non-fatal; falls back to "New Conversation"
 - Storage errors in the streaming path are logged (the SSE response has already started, so headers cannot be changed)
+- Server handles `SIGINT`/`SIGTERM` with a 6-minute graceful shutdown window (allows in-flight council requests to complete)
 
 ## Dependencies
 
@@ -113,7 +166,7 @@ Standard library covers HTTP, JSON, concurrency, and file I/O. External dependen
 
 ## CORS
 
-Allow `http://localhost:5173` (Vite dev server) and `http://localhost:3000` during development.
+Allowed origins are checked in `corsMiddleware`. Currently `http://localhost:5173` (Vite) and `http://localhost:3000` are accepted for local development. Moving origins to `Config` (from a `CORS_ORIGINS` env var) is tracked in issue #18.
 
 ## Running
 
