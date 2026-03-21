@@ -126,17 +126,20 @@ Each conversation is a single JSON file at `data/conversations/{uuid}.json`.
 
 ### Title Generation
 
-Title generation runs in a goroutine started before `RunFull()` so it overlaps with the council pipeline:
+Title generation runs in a goroutine started before `RunFull()` so it overlaps with the council pipeline. It only runs for the first message in a conversation (`isFirst`):
 
 ```go
-titleCh := make(chan string, 1)
-go func() {
-    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-    defer cancel()
-    titleCh <- h.council.GenerateTitle(ctx, req.Content)
-}()
+var titleCh chan string
+if isFirst {
+    titleCh = make(chan string, 1)
+    go func() {
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+        titleCh <- h.council.GenerateTitle(ctx, req.Content)
+    }()
+}
 result, err := h.council.RunFull(r.Context(), req.Content)
-// ... then receive from titleCh
+// ... if isFirst: h.store.UpdateTitle(id, <-titleCh)
 ```
 
 The goroutine uses `context.Background()` (not the request context) so it completes even if the client disconnects. A 30-second timeout bounds its lifetime.
