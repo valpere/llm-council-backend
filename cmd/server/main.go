@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"llm-council/internal/api"
 	"llm-council/internal/config"
@@ -18,12 +23,34 @@ func main() {
 	godotenv.Load() // ignore error if .env not present
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid configuration: %v", err)
+	}
+
 	client := openrouter.New(cfg.OpenRouterAPIKey)
 	c := council.New(client, cfg.CouncilModels, cfg.ChairmanModel)
 	store := storage.New(cfg.DataDir)
 	handler := api.New(c, store)
 
 	addr := ":" + cfg.Port
-	fmt.Printf("LLM Council API listening on %s\n", addr)
-	log.Fatal(http.ListenAndServe(addr, handler.Routes()))
+	srv := &http.Server{Addr: addr, Handler: handler.Routes()}
+
+	go func() {
+		fmt.Printf("LLM Council API listening on %s\n", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("server forced to shutdown: %v", err)
+	}
+	log.Println("Server stopped")
 }
