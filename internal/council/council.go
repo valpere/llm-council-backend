@@ -114,7 +114,7 @@ Now provide your evaluation and ranking:`, userQuery, responsesText.String())
 	return results, labelToModel, nil
 }
 
-func (c *Council) Stage3SynthesizeFinal(ctx context.Context, userQuery string, stage1Results []StageOneResult, stage2Results []StageTwoResult) StageThreeResult {
+func (c *Council) Stage3SynthesizeFinal(ctx context.Context, userQuery string, stage1Results []StageOneResult, stage2Results []StageTwoResult) (StageThreeResult, error) {
 	var stage1Text strings.Builder
 	for i, r := range stage1Results {
 		if i > 0 {
@@ -152,10 +152,9 @@ Provide a clear, well-reasoned final answer that represents the council's collec
 	messages := []openrouter.Message{{Role: "user", Content: chairmanPrompt}}
 	resp, err := c.client.QueryModel(ctx, c.chairmanModel, messages, 120*time.Second)
 	if err != nil {
-		log.Printf("stage3: error querying chairman %s: %v", c.chairmanModel, err)
-		return StageThreeResult{Model: c.chairmanModel, Response: "Error: Unable to generate final synthesis."}
+		return StageThreeResult{}, fmt.Errorf("stage3: chairman %s: %w", c.chairmanModel, err)
 	}
-	return StageThreeResult{Model: c.chairmanModel, Response: resp.Content}
+	return StageThreeResult{Model: c.chairmanModel, Response: resp.Content}, nil
 }
 
 func (c *Council) GenerateTitle(ctx context.Context, userQuery string) string {
@@ -196,7 +195,10 @@ func (c *Council) RunFull(ctx context.Context, userQuery string) (Result, error)
 	}
 
 	aggregateRankings := CalculateAggregateRankings(stage2, labelToModel)
-	stage3 := c.Stage3SynthesizeFinal(ctx, userQuery, stage1, stage2)
+	stage3, err := c.Stage3SynthesizeFinal(ctx, userQuery, stage1, stage2)
+	if err != nil {
+		return Result{}, err
+	}
 
 	return Result{
 		Stage1: stage1,

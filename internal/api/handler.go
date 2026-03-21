@@ -247,7 +247,11 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 
 	// Stage 3
 	send(map[string]string{"type": "stage3_start"})
-	stage3 := h.council.Stage3SynthesizeFinal(ctx, req.Content, stage1, stage2)
+	stage3, err := h.council.Stage3SynthesizeFinal(ctx, req.Content, stage1, stage2)
+	if err != nil {
+		send(map[string]string{"type": "error", "message": err.Error()})
+		return
+	}
 	send(map[string]any{"type": "stage3_complete", "data": stage3})
 
 	// Wait for title
