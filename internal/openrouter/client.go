@@ -20,8 +20,11 @@ type Client struct {
 
 func New(apiKey string) *Client {
 	return &Client{
-		apiKey:     apiKey,
-		httpClient: &http.Client{},
+		apiKey: apiKey,
+		// 5-minute transport-level ceiling acts as a safety backstop against a hung
+		// connection. Per-request deadlines via context.WithTimeout (120 s) should
+		// normally fire first; this timeout only applies if something goes badly wrong.
+		httpClient: &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
