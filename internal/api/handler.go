@@ -63,7 +63,9 @@ func (h *Handler) corsMiddleware(next http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Warn("writeJSON: encode failed", "status", status, "error", err)
+	}
 }
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {
