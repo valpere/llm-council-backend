@@ -16,16 +16,19 @@ llm-council-backend/
 │   │   └── client.go        # QueryModel(), QueryModelsParallel()
 │   ├── council/
 │   │   ├── interfaces.go    # LLMClient and Runner interfaces; compile-time checks
-│   │   ├── types.go         # StageOneResult, StageTwoResult, AggregateRanking, Result
+│   │   ├── types.go         # StageOneResult, StageTwoResult, AggregateRanking, Metadata, Result
 │   │   ├── prompts.go       # rankingPromptTemplate, chairmanPromptTemplate, titlePromptTemplate
-│   │   ├── council.go       # Council struct; stage functions; CalculateAggregateRankings
+│   │   ├── council.go       # Council struct; stage functions; CalculateAggregateRankings; kendallW
 │   │   └── council_test.go  # Unit tests for parseRankingFromText, CalculateAggregateRankings
 │   ├── storage/
-│   │   └── storage.go       # Storer interface; Store struct; Create/Get/AddMessage/UpdateTitle/List
+│   │   ├── storage.go       # Storer interface; Store struct; Create/Get/AddMessage/UpdateTitle/List
+│   │   └── storage_test.go  # Integration tests with real filesystem; race-detection coverage
 │   └── api/
-│       └── handler.go       # HTTP handlers, CORS middleware, SSE streaming
+│       ├── handler.go       # HTTP handlers, CORS middleware, SSE streaming
+│       └── handler_test.go  # Handler tests using fakeCouncil / fakeStore stubs
 ├── data/
 │   └── conversations/       # JSON conversation files
+├── tools.go                 # //go:build tools — pins staticcheck for go run
 ├── go.mod
 ├── go.sum
 └── .env                     # Local secrets (not committed)
@@ -62,7 +65,7 @@ data: {"type":"stage1_start"}
 
 data: {"type":"stage1_complete","data":[...]}
 
-data: {"type":"stage2_complete","data":[...],"metadata":{"label_to_model":{...},"aggregate_rankings":[...]}}
+data: {"type":"stage2_complete","data":[...],"metadata":{"label_to_model":{...},"aggregate_rankings":[...],"consensus_w":0.72}}
 
 data: {"type":"stage3_complete","data":{...}}
 
@@ -86,10 +89,10 @@ type LLMClient interface {
 type Runner interface {
     Stage1CollectResponses(ctx, query) ([]StageOneResult, error)
     Stage2CollectRankings(ctx, query, stage1) ([]StageTwoResult, map[string]string, error)
-    Stage3SynthesizeFinal(ctx, query, stage1, stage2) (StageThreeResult, error)
+    Stage3SynthesizeFinal(ctx, query, stage1, stage2 []StageTwoResult, consensusW float64) (StageThreeResult, error)
     GenerateTitle(ctx, query) string
     RunFull(ctx, query) (Result, error)
-    CalculateAggregateRankings(stage2, labelToModel) []AggregateRanking
+    CalculateAggregateRankings(stage2, labelToModel) ([]AggregateRanking, float64)
 }
 ```
 
@@ -113,6 +116,7 @@ type Config struct {
     TitleModel       string     // TITLE_MODEL — default: gemini-2.5-flash
     DataDir          string     // DATA_DIR — default: data/conversations
     Port             string     // PORT — default: 8001
+    CORSOrigins      []string   // CORS_ORIGINS — comma-separated; default: localhost:5173,localhost:3000
 }
 ```
 
@@ -126,20 +130,21 @@ Each conversation is a single JSON file at `data/conversations/{uuid}.json`.
 
 ### Title Generation
 
-Title generation runs in a goroutine started before `RunFull()` so it overlaps with the council pipeline. It only runs for the first message in a conversation (`isFirst`):
+Title generation runs in a goroutine started before `RunFull()` so it overlaps with the council pipeline. It only runs for the first message in a conversation (`isFirst`). The result is captured through a closure (`awaitTitle`) that blocks on the channel, keeping the channel scoped to the `if` block:
 
 ```go
-var titleCh chan string
+var awaitTitle func() string
 if isFirst {
-    titleCh = make(chan string, 1)
+    ch := make(chan string, 1)
     go func() {
         ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
         defer cancel()
-        titleCh <- h.council.GenerateTitle(ctx, req.Content)
+        ch <- h.council.GenerateTitle(ctx, req.Content)
     }()
+    awaitTitle = func() string { return <-ch }
 }
 result, err := h.council.RunFull(r.Context(), req.Content)
-// ... if isFirst: h.store.UpdateTitle(id, <-titleCh)
+// ... if awaitTitle != nil: h.store.UpdateTitle(id, awaitTitle())
 ```
 
 The goroutine uses `context.Background()` (not the request context) so it completes even if the client disconnects. A 30-second timeout bounds its lifetime.
@@ -154,28 +159,42 @@ The goroutine uses `context.Background()` (not the request context) so it comple
 - Storage errors in the streaming path are logged (the SSE response has already started, so headers cannot be changed)
 - Server handles `SIGINT`/`SIGTERM` with a 6-minute graceful shutdown window (allows in-flight council requests to complete)
 
+## Logging
+
+All log output uses `log/slog` with a JSON handler writing to stdout, configured at startup in `main.go`:
+
+```go
+slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+```
+
+Every log entry is a structured JSON object. Error-level entries are emitted for failures that affect correctness (e.g., failed title update, failed assistant message persist). Warn-level entries are used for recoverable issues (e.g., corrupt storage files skipped during `List()`, `writeJSON` encoder errors). The `slog.Warn` in `writeJSON` is the only location that logs after the HTTP response has started writing.
+
 ## Dependencies
 
 | Package | Purpose |
 |---------|---------|
 | `net/http` | HTTP server (stdlib) |
 | `encoding/json` | JSON encode/decode (stdlib) |
+| `log/slog` | Structured JSON logging (stdlib, Go 1.21+) |
 | `sync` | WaitGroup + per-conversation Mutex (stdlib) |
 | `math/rand` | Label shuffle for Stage 2 anonymization (stdlib) |
 | `github.com/google/uuid` | Conversation ID generation |
 | `github.com/joho/godotenv` | Load `.env` file |
+| `honnef.co/go/tools/cmd/staticcheck` | Static analysis (tools-only build tag; invoked via `make lint`) |
 
-Standard library covers HTTP, JSON, concurrency, and file I/O. External dependencies are minimal.
+Standard library covers HTTP, JSON, concurrency, and file I/O. External runtime dependencies are minimal.
 
 ## CORS
 
-Allowed origins are checked in `corsMiddleware`. Currently `http://localhost:5173` (Vite) and `http://localhost:3000` are accepted for local development. Moving origins to `Config` (from a `CORS_ORIGINS` env var) is tracked in issue #18.
+Allowed origins are configured via the `CORS_ORIGINS` environment variable (comma-separated). The default value allows `http://localhost:5173` (Vite) and `http://localhost:3000` for local development. The middleware checks each incoming `Origin` header against an allowlist built from `Config.CORSOrigins` at handler construction time.
 
 ## Running
 
 ```bash
 make dev                     # go run ./cmd/server
 make build && ./bin/llm-council  # compiled binary
+make lint                    # go vet ./... && staticcheck ./...
+make test                    # go test ./...
 ```
 
 Frontend (separate repo):

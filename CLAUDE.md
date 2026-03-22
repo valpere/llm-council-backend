@@ -23,6 +23,8 @@ See `docs/` for full documentation:
 ```bash
 # Backend (this repo)
 go run ./cmd/server
+make lint    # go vet + staticcheck
+make test    # go test ./...
 
 # Frontend (separate repo)
 cd ../llm-council-frontend && npm run dev

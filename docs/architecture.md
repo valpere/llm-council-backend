@@ -82,9 +82,11 @@ The `/message/stream` endpoint emits progress as each stage completes. All event
 ```
 data: {"type":"stage1_complete","data":[...]}
 
-data: {"type":"stage2_complete","data":[...],"metadata":{...}}
+data: {"type":"stage2_complete","data":[...],"metadata":{"label_to_model":{...},"aggregate_rankings":[...],"consensus_w":0.72}}
 
 data: {"type":"stage3_complete","data":{...}}
+
+data: {"type":"title_complete","data":{"title":"..."}}
 
 data: {"type":"complete"}
 ```
@@ -111,18 +113,30 @@ The `label_to_model` mapping and `aggregate_rankings` are computed per-request a
 ### Title Generation Parallelism
 Title generation (a separate cheap LLM call) starts concurrently with `RunFull()`. It uses a detached `context.Background()` — not the request context — so it completes even if the client disconnects, and is bounded by a 30-second timeout.
 
+### Kendall's W Consensus Score
+After Stage 2, `CalculateAggregateRankings` computes Kendall's W (coefficient of concordance) across all council model rankings. W = 1.0 means perfect agreement; W = 0.0 means no agreement. The score is passed to the Chairman prompt with an English interpretation (strong / moderate / weak agreement) so the synthesis tone matches the actual degree of consensus. The `consensus_w` field is included in the `stage2_complete` SSE event and in the API response `Metadata`.
+
+### Health Endpoints
+Two dedicated health endpoints follow the standard liveness/readiness split. `/health/live` always returns 200 while the process is running. `/health/ready` performs a lightweight check (creates and stats the data directory) and returns 503 if the storage layer is unavailable. The root `/` endpoint is retained for backward compatibility.
+
+### Structured Logging
+The server uses `log/slog` with a JSON handler (written to stdout) from startup. All log entries include structured key-value context. Error-level entries are emitted for failures that affect correctness; warn-level for recoverable issues (e.g., skipped corrupt storage files, `writeJSON` encode failures).
+
 ### JSON File Storage
 Conversations are stored as individual JSON files in `data/conversations/{uuid}.json`. No database setup required. Simple and transparent.
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/conversations` | List all conversations |
-| `POST` | `/api/conversations` | Create a new conversation |
-| `GET` | `/api/conversations/{id}` | Get conversation with messages |
-| `POST` | `/api/conversations/{id}/message` | Send message, get full response |
-| `POST` | `/api/conversations/{id}/message/stream` | Send message, stream stage events |
+| Method | Path | Status | Description |
+|--------|------|--------|-------------|
+| `GET` | `/` | 200 | Legacy health check (returns `{"status":"ok","service":"LLM Council API"}`) |
+| `GET` | `/health/live` | 200 | Liveness probe — process is running |
+| `GET` | `/health/ready` | 200 / 503 | Readiness probe — data directory is accessible |
+| `GET` | `/api/conversations` | 200 | List all conversations |
+| `POST` | `/api/conversations` | 201 | Create a new conversation |
+| `GET` | `/api/conversations/{id}` | 200 / 404 | Get conversation with messages |
+| `POST` | `/api/conversations/{id}/message` | 200 | Send message, get full response |
+| `POST` | `/api/conversations/{id}/message/stream` | 200 | Send message, stream stage events |
 
 ## External Services
 

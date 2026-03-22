@@ -22,7 +22,7 @@ Responses from Stage 1 are presented to all council models anonymously. Each mod
 4. Parse rankings from each response using regex
 5. Compute aggregate rankings (average position per model)
 
-**Output:** `[]StageTwoResult{Model, Ranking, ParsedRanking}` + `labelToModel` map + `aggregateRankings`
+**Output:** `[]StageTwoResult{Model, Ranking, ParsedRanking}` + `labelToModel` map + `aggregateRankings` + `consensusW float64`
 
 ### Ranking Prompt Format
 
@@ -41,12 +41,24 @@ This strict format enables reliable regex extraction without needing another LLM
 
 For each model, all ranking positions assigned by peers are collected and averaged. Lower average = better perceived quality. This is displayed as "Street Cred" in the UI.
 
+### Kendall's W Consensus Score
+
+`CalculateAggregateRankings` returns both the aggregate rankings slice and a `float64` consensus score computed via Kendall's coefficient of concordance (W).
+
+- **W = 1.0** — perfect agreement across all council rankers
+- **W = 0.0** — no agreement (rankings are random)
+- **W ≥ 0.7** — interpreted as strong agreement
+- **0.4 ≤ W < 0.7** — interpreted as moderate agreement
+- **W < 0.4** — interpreted as weak agreement
+
+Partial rankings (models that did not rank all items) are handled by assigning the midrank of the unranked positions, keeping W within [0, 1]. The score is passed to Stage 3 and included in the `stage2_complete` SSE event and in the `Metadata.ConsensusW` field of the API response.
+
 ## Stage 3: Chairman Synthesis
 
 A single designated model (the Chairman) receives full context — all Stage 1 responses with model attribution and all Stage 2 rankings — and synthesizes a comprehensive final answer.
 
-**Input:** User query + Stage 1 results + Stage 2 results (de-anonymized)
-**Process:** Single query to `CHAIRMAN_MODEL`
+**Input:** User query + Stage 1 results + Stage 2 results (de-anonymized) + `consensusW float64`
+**Process:** Single query to `CHAIRMAN_MODEL`. The `consensusW` score is formatted into a human-readable "CONSENSUS SCORE (Kendall's W)" block appended to the chairman prompt, guiding the synthesis tone: high agreement → confident single answer; low agreement → present multiple perspectives.
 **Output:** `StageThreeResult{Model, Response}`
 
 ## De-anonymization
