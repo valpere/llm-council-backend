@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,7 +38,7 @@ func main() {
 	srv := &http.Server{Addr: addr, Handler: handler.Routes()}
 
 	go func() {
-		fmt.Printf("LLM Council API listening on %s\n", addr)
+		slog.Info("LLM Council API listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
 			os.Exit(1)

@@ -164,12 +164,12 @@ func (s *Store) List() ([]ConversationMeta, error) {
 		filePath := filepath.Join(s.dataDir, entry.Name())
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			slog.Warn("storage: skipping file", "path", filePath, "error", err)
+			slog.Warn("storage: skipping file", "op", "read", "path", filePath, "error", err)
 			continue
 		}
 		var conv Conversation
 		if err := json.Unmarshal(data, &conv); err != nil {
-			slog.Warn("storage: skipping file", "path", filePath, "error", err)
+			slog.Warn("storage: skipping file", "op", "unmarshal", "path", filePath, "error", err)
 			continue
 		}
 		metas = append(metas, ConversationMeta{

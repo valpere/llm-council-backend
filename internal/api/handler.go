@@ -229,7 +229,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	send := func(v any) {
 		data, err := json.Marshal(v)
 		if err != nil {
-			slog.Error("sendMessageStream: marshal failed", "error", err)
+			slog.Error("sendMessageStream: marshal failed", "conversation_id", id, "error", err)
 			fmt.Fprintf(w, "data: {\"type\":\"error\",\"message\":\"internal serialization error\"}\n\n")
 			flusher.Flush()
 			return
