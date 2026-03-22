@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -51,9 +52,12 @@ func (f *fakeStore) AddMessage(id string, msg any) error {
 	defer f.mu.Unlock()
 	conv, ok := f.convs[id]
 	if !ok {
-		return nil
+		return fmt.Errorf("conversation %s not found", id)
 	}
-	raw, _ := json.Marshal(msg)
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
 	conv.Messages = append(conv.Messages, raw)
 	return nil
 }
@@ -61,9 +65,11 @@ func (f *fakeStore) AddMessage(id string, msg any) error {
 func (f *fakeStore) UpdateTitle(id, title string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if conv, ok := f.convs[id]; ok {
-		conv.Title = title
+	conv, ok := f.convs[id]
+	if !ok {
+		return fmt.Errorf("conversation %s not found", id)
 	}
+	conv.Title = title
 	return nil
 }
 
@@ -164,8 +170,29 @@ func TestCreateConversation(t *testing.T) {
 		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
 	}
 	body := decodeBody(t, w)
-	if body["id"] == "" {
-		t.Error("response missing id field")
+	id, ok := body["id"].(string)
+	if !ok || id == "" {
+		t.Errorf("response id field missing or not a non-empty string: got %T (%v)", body["id"], body["id"])
+	}
+}
+
+func TestListConversations(t *testing.T) {
+	store := newFakeStore()
+	store.Create("aaaaaaaa-0000-0000-0000-000000000001")
+	store.Create("aaaaaaaa-0000-0000-0000-000000000002")
+	h := newTestHandler(store, &fakeCouncil{})
+
+	w := do(t, h, http.MethodGet, "/api/conversations", nil)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	var list []map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("list length: got %d, want 2", len(list))
 	}
 }
 

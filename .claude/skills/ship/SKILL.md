@@ -102,7 +102,7 @@ internal/openrouter/   ← LLM calls; no council, no storage
 
 ---
 
-## Step 5: Pre-flight
+## Step 4: Pre-flight
 
 ```bash
 go build ./...
@@ -116,7 +116,7 @@ Fix any failures from your changes before proceeding. Note pre-existing failures
 
 ---
 
-## Step 6: Create PR
+## Step 5: Create PR
 
 Push the branch and open a PR:
 
@@ -144,7 +144,7 @@ Debt emoji: `⚡` quick-fix · `⚖️` balanced · `🏗️` proper-refactor
 
 ---
 
-## Step 7: Wait for Copilot review (poll yourself)
+## Step 6: Wait for Copilot review (poll yourself)
 
 Check review status yourself — do not ask the user:
 
@@ -162,7 +162,7 @@ Once Copilot has posted its review (or 5 minutes have elapsed with no review), p
 
 ---
 
-## Step 8: Address Copilot comments (if any)
+## Step 7: Address Copilot comments (if any)
 
 Fetch the review comments:
 
@@ -187,7 +187,7 @@ git push
 
 ---
 
-## Step 9: Merge
+## Step 8: Merge
 
 ```bash
 gh pr merge <number> --squash --delete-branch
@@ -196,7 +196,7 @@ git checkout main && git pull
 
 ---
 
-## Step 10: Resolve and report
+## Step 9: Resolve and report
 
 The `Closes #N` in the PR body auto-closes the issue on merge. Verify:
 
@@ -213,7 +213,7 @@ Report: issue closed, PR merged, what Copilot flagged (if anything).
 
 ---
 
-## Step 11: Present next issue
+## Step 10: Present next issue
 
 Show the next unblocked issue from the queue (same query as Step 0, skip already-resolved).
 **Do not start implementing it** — wait for the user's command.
