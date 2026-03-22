@@ -1,46 +1,60 @@
 ---
 name: ship
-description: Implement a GitHub issue end-to-end — select issue, branch, code, tests, PR, review, merge. Without args: shows open issues to select from. This is the entry point for processing any existing GitHub issue.
+description: Implement a GitHub issue end-to-end — branch, code, tests, PR, Copilot review (once), merge, resolve. Without args: shows top 5 unblocked issues to select from. With issue number or title: ships that issue directly.
 user-invocable: true
-argument-hint: "[issue-number]"
+argument-hint: "[issue-number | issue-title]"
 metadata:
-  version: "2.0"
+  version: "3.0"
   author: backend-claude
   last_updated: "2026-03-21"
 ---
 
 # /ship
 
-Implement a GitHub issue from selection to merged PR.
+Implement one GitHub issue from selection to merged PR, then present the next.
 
 ```
-/ship → select issue → branch → implement → pre-flight → PR → Copilot → /fix-review → merge
+select issue → branch → implement → pre-flight → PR → Copilot (once) → address → merge → Resolved → next
 ```
 
 ## Rules
 
+- **One issue at a time.** Never work on multiple issues in parallel.
+- **Branch protection** — no direct pushes to `main`. Always use a PR.
+- **Copilot review once.** Poll for it yourself. Address comments if any. Then merge. Do not wait for a second review.
 - Only ship PRs created by Claude or explicitly named by the user. Never touch Dependabot PRs.
-- Branch protection is on — no direct pushes to `main`. Always go through a PR.
-- One round of Copilot comments only. After `/fix-review`, do not wait for re-review.
-- If Copilot has no comments (or only approves), merge immediately.
-- After merge: `git checkout main && git pull`.
-- **Always wait for user confirmation before starting implementation.**
+- After merge: checkout main, pull, then present the next unblocked issue.
 
 ---
 
 ## Step 0: Select issue
 
-If called with no argument, list open GitHub issues sorted by priority:
+**`/ship <number>`** — fetch that issue directly, skip menu.
+
+**`/ship <title>`** — search open issues for a title match, skip menu if unambiguous.
+
+**`/ship` (no args)** — list the top 5 open, unblocked issues sorted by priority:
 
 ```bash
 gh issue list --repo valpere/llm-council-backend --state open \
   --json number,title,labels \
-  --jq 'sort_by(.labels[].name) | .[] | "#\(.number) \(.title) [\([.labels[].name] | join(", "))]"'
+  --jq '[.[] | select(.labels | map(.name) | contains(["blocked"]) | not)]
+        | sort_by(
+            (.labels | map(.name) | map(
+              if . == "p0: critical" then 0
+              elif . == "p1: high" then 1
+              elif . == "p2: medium" then 2
+              else 3 end
+            ) | min) // 3
+          )
+        | .[:5]
+        | to_entries[]
+        | "\(.key + 1). #\(.value.number) \(.value.title) [\(.value.labels | map(.name) | join(", "))]"'
 ```
 
-Display as a numbered menu. Wait for user to select.
+If **all open issues are blocked**, say so and stop — do not show a menu.
 
-If called with an issue number (e.g. `/ship 29`), skip the menu.
+Display as a numbered menu and wait for selection.
 
 ---
 
@@ -50,13 +64,13 @@ If called with an issue number (e.g. `/ship 29`), skip the menu.
 gh issue view <number> --repo valpere/llm-council-backend --json title,body,labels
 ```
 
-Read the `## Summary` and `## Acceptance Criteria` sections. These define what done looks like.
+Read `## Summary` and `## Acceptance Criteria`. These define what done looks like.
 
 ---
 
 ## Step 2: Read affected files
 
-Read every file that will change before writing anything. Do not guess.
+Read every file that will change. Do not guess — read them first.
 
 Typical candidates:
 - **API / HTTP** — `internal/api/handler.go`
@@ -70,29 +84,14 @@ Run `go build ./...` to confirm baseline compiles.
 
 ---
 
-## Step 3: Present implementation approach and wait for confirmation
-
-Briefly describe:
-- What files will change and why
-- Debt level (⚡/⚖️/🏗️)
-- Any design decisions with more than one reasonable answer
-
-**Stop here. Do not write code until the user confirms.**
-
----
-
-## Step 4: Create branch and implement
+## Step 3: Create branch and implement
 
 ```bash
-git checkout -b <type>/<slug>   # e.g. test/handler-tests, fix/cors-origins
+git checkout -b <type>/<slug>   # e.g. fix/cors-origins, test/handler-tests
 ```
 
-Implement changes:
-- Stay within layer boundaries (no business logic in handlers, no net/http in council/storage)
-- Follow existing patterns in the codebase
-- Write tests at the declared debt level
+Implement changes within layer boundaries:
 
-Layer boundaries (enforce strictly):
 ```
 cmd/server/main.go     ← wiring only
 internal/api/          ← parse → call interfaces → respond; no logic
@@ -103,7 +102,7 @@ internal/openrouter/   ← LLM calls; no council, no storage
 
 ---
 
-## Step 5: Pre-flight
+## Step 4: Pre-flight
 
 ```bash
 go build ./...
@@ -117,9 +116,13 @@ Fix any failures from your changes before proceeding. Note pre-existing failures
 
 ---
 
-## Step 6: Create PR
+## Step 5: Create PR
+
+Push the branch and open a PR:
 
 ```bash
+git push -u origin <branch>
+
 gh pr create \
   --title "<debt-emoji> <type>(<scope>): <description>" \
   --body "$(cat <<'EOF'
@@ -137,27 +140,54 @@ EOF
 )"
 ```
 
-Debt emoji in title: `⚡` quick-fix · `⚖️` balanced · `🏗️` proper-refactor
+Debt emoji: `⚡` quick-fix · `⚖️` balanced · `🏗️` proper-refactor
 
 ---
 
-## Step 7: Wait for Copilot
+## Step 6: Wait for Copilot review (poll yourself)
+
+Check review status yourself — do not ask the user:
 
 ```bash
-gh pr checks <number> --watch
+# Poll until a review appears or 5 minutes pass
+gh pr view <number> --repo valpere/llm-council-backend --json reviews,statusCheckRollup
 ```
 
-Wait up to 5 minutes. If no review appears, proceed to merge.
+Or watch checks:
+```bash
+gh pr checks <number> --watch --interval 30
+```
+
+Once Copilot has posted its review (or 5 minutes have elapsed with no review), proceed.
 
 ---
 
-## Step 8: Address comments
+## Step 7: Address Copilot comments (if any)
 
-Run `/fix-review <number>` — one round only. Push fixes. Do not wait for re-review.
+Fetch the review comments:
+
+```bash
+gh pr view <number> --repo valpere/llm-council-backend --json reviews \
+  --jq '.reviews[] | select(.author.login == "copilot-pull-request-reviewer") | .body'
+
+gh api repos/valpere/llm-council-backend/pulls/<number>/comments \
+  --jq '.[] | "[\(.path):\(.line)] \(.body)"'
+```
+
+- If **no comments**: skip to Step 9.
+- If **there are comments**: address each one, commit the fixes, push.
+
+```bash
+git add <files>
+git commit -m "address Copilot review comments"
+git push
+```
+
+**One round only.** Do not wait for re-review after pushing fixes.
 
 ---
 
-## Step 9: Merge
+## Step 8: Merge
 
 ```bash
 gh pr merge <number> --squash --delete-branch
@@ -166,12 +196,34 @@ git checkout main && git pull
 
 ---
 
-## Step 10: Report
+## Step 9: Resolve and report
 
-Summarise: issue closed, PR number, what Copilot flagged (if anything), merge commit.
+The `Closes #N` in the PR body auto-closes the issue on merge. Verify:
+
+```bash
+gh issue view <number> --repo valpere/llm-council-backend --json state,stateReason
+```
+
+If not closed automatically:
+```bash
+gh issue close <number> --repo valpere/llm-council-backend --comment "Resolved in PR #<pr-number>."
+```
+
+Report: issue closed, PR merged, what Copilot flagged (if anything).
+
+---
+
+## Step 10: Present next issue
+
+Show the next unblocked issue from the queue (same query as Step 0, skip already-resolved).
+**Do not start implementing it** — wait for the user's command.
+
+---
 
 ## What NOT to do
 
+- Do not work on more than one issue at a time.
 - Do not bump version numbers or update changelogs unless asked.
-- Do not open follow-up issues unless review reveals a real bug outside the PR scope.
-- Do not run `go mod tidy` unless the PR actually adds/removes dependencies.
+- Do not open follow-up issues unless review reveals a real bug outside PR scope.
+- Do not run `go mod tidy` unless the PR adds/removes dependencies.
+- Do not invoke `/fix-review` — this skill handles the review loop itself.
