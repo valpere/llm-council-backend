@@ -237,4 +237,25 @@ func TestKendallW(t *testing.T) {
 			t.Errorf("expected W=0.0 for no rankers, got %v", w)
 		}
 	})
+
+	t.Run("incomplete rankings stay within [0,1]", func(t *testing.T) {
+		// Both rankers omit the same item — midrank assignment must keep W in [0,1].
+		stage2 := []StageTwoResult{
+			{Model: "m1", ParsedRanking: []string{"Response A", "Response B"}}, // omits C
+			{Model: "m2", ParsedRanking: []string{"Response A", "Response B"}}, // omits C
+		}
+		labelToModel := map[string]string{
+			"Response A": "alpha",
+			"Response B": "beta",
+			"Response C": "gamma",
+		}
+		_, w := CalculateAggregateRankings(stage2, labelToModel)
+		if w < 0 || w > 1 {
+			t.Errorf("W out of [0,1] range for incomplete rankings: %v", w)
+		}
+		// Both rankers agree on A>B and both omit C — W should be 1.0.
+		if w != 1.0 {
+			t.Errorf("expected W=1.0 when rankers agree on partial rankings, got %v", w)
+		}
+	})
 }

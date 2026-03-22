@@ -255,7 +255,9 @@ func kendallW(stage2Results []StageTwoResult, labelToModel map[string]string) fl
 	}
 
 	// Build rank sums: for each model, sum its rank from every ranker.
-	// Missing rank (model not mentioned by a ranker) is treated as n+1 (last place).
+	// Unranked items receive the midrank of the positions they share:
+	// midrank = (k+1 + n) / 2, where k = number of items this ranker did rank.
+	// This is the standard tie/partial-ranking adjustment and keeps W in [0,1].
 	rankSums := make(map[string]float64, n)
 	for _, r := range stage2Results {
 		if len(r.ParsedRanking) == 0 {
@@ -267,12 +269,14 @@ func kendallW(stage2Results []StageTwoResult, labelToModel map[string]string) fl
 				rankMap[model] = pos + 1
 			}
 		}
+		k := len(rankMap)
+		midrank := float64(k+1+n) / 2.0
 		for model := range uniqueModels {
-			rank, ok := rankMap[model]
-			if !ok {
-				rank = n + 1
+			if rank, ok := rankMap[model]; ok {
+				rankSums[model] += float64(rank)
+			} else {
+				rankSums[model] += midrank
 			}
-			rankSums[model] += float64(rank)
 		}
 	}
 
@@ -287,5 +291,5 @@ func kendallW(stage2Results []StageTwoResult, labelToModel map[string]string) fl
 	if denom == 0 {
 		return 0
 	}
-	return 12.0 * S / denom
+	return math.Min(math.Max(12.0*S/denom, 0), 1)
 }
