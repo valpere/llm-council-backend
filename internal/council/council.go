@@ -3,7 +3,7 @@ package council
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"math/rand"
 	"regexp"
@@ -37,7 +37,7 @@ func (c *Council) Stage1CollectResponses(ctx context.Context, userQuery string) 
 	var results []StageOneResult
 	for _, mr := range modelResults {
 		if mr.Err != nil {
-			log.Printf("stage1: error querying %s: %v", mr.Model, mr.Err)
+			slog.Error("stage1: model query failed", "model", mr.Model, "error", mr.Err)
 			continue
 		}
 		results = append(results, StageOneResult{Model: mr.Model, Response: mr.Response.Content})
@@ -73,7 +73,7 @@ func (c *Council) Stage2CollectRankings(ctx context.Context, userQuery string, s
 	var results []StageTwoResult
 	for _, mr := range modelResults {
 		if mr.Err != nil {
-			log.Printf("stage2: error querying %s: %v", mr.Model, mr.Err)
+			slog.Error("stage2: model query failed", "model", mr.Model, "error", mr.Err)
 			continue
 		}
 		fullText := mr.Response.Content

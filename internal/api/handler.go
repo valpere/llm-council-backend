@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -71,7 +71,7 @@ func (h *Handler) healthLive(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) healthReady(w http.ResponseWriter, r *http.Request) {
 	unavailable := func(err error) {
-		log.Printf("healthReady: data directory check failed: %v", err)
+		slog.Error("healthReady: data directory check failed", "error", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"status": "not ready",
 			"error":  "data directory unavailable",
@@ -174,7 +174,7 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 
 	if isFirst {
 		if err := h.store.UpdateTitle(id, <-titleCh); err != nil {
-			log.Printf("sendMessage: UpdateTitle %s: %v", id, err)
+			slog.Error("sendMessage: UpdateTitle failed", "conversation_id", id, "error", err)
 		}
 	}
 
@@ -184,7 +184,7 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		"stage2": result.Stage2,
 		"stage3": result.Stage3,
 	}); err != nil {
-		log.Printf("sendMessage: AddMessage (assistant) %s: %v", id, err)
+		slog.Error("sendMessage: AddMessage (assistant) failed", "conversation_id", id, "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to persist response"})
 		return
 	}
@@ -229,7 +229,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	send := func(v any) {
 		data, err := json.Marshal(v)
 		if err != nil {
-			log.Printf("sendMessageStream: json.Marshal: %v", err)
+			slog.Error("sendMessageStream: marshal failed", "error", err)
 			fmt.Fprintf(w, "data: {\"type\":\"error\",\"message\":\"internal serialization error\"}\n\n")
 			flusher.Flush()
 			return
@@ -300,7 +300,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	if isFirst {
 		tm := <-titleCh
 		if err := h.store.UpdateTitle(id, tm.title); err != nil {
-			log.Printf("sendMessageStream: UpdateTitle %s: %v", id, err)
+			slog.Error("sendMessageStream: UpdateTitle failed", "conversation_id", id, "error", err)
 		}
 		send(map[string]any{"type": "title_complete", "data": map[string]string{"title": tm.title}})
 	}
@@ -312,7 +312,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 		"stage2": stage2,
 		"stage3": stage3,
 	}); err != nil {
-		log.Printf("sendMessageStream: AddMessage (assistant) %s: %v", id, err)
+		slog.Error("sendMessageStream: AddMessage (assistant) failed", "conversation_id", id, "error", err)
 		send(map[string]string{"type": "error", "message": "failed to persist conversation"})
 		return
 	}

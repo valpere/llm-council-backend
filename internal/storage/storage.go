@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -164,12 +164,12 @@ func (s *Store) List() ([]ConversationMeta, error) {
 		filePath := filepath.Join(s.dataDir, entry.Name())
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("storage: skipping %s: read error: %v", filePath, err)
+			slog.Warn("storage: skipping file", "path", filePath, "error", err)
 			continue
 		}
 		var conv Conversation
 		if err := json.Unmarshal(data, &conv); err != nil {
-			log.Printf("storage: skipping %s: unmarshal error: %v", filePath, err)
+			slog.Warn("storage: skipping file", "path", filePath, "error", err)
 			continue
 		}
 		metas = append(metas, ConversationMeta{
