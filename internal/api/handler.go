@@ -161,14 +161,15 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Start title generation concurrently so it doesn't block RunFull.
 	// Detached from the request context so it completes even if the client disconnects.
-	var titleCh chan string
+	var awaitTitle func() string
 	if isFirst {
-		titleCh = make(chan string, 1)
+		ch := make(chan string, 1)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			titleCh <- h.council.GenerateTitle(ctx, req.Content)
+			ch <- h.council.GenerateTitle(ctx, req.Content)
 		}()
+		awaitTitle = func() string { return <-ch }
 	}
 
 	result, err := h.council.RunFull(r.Context(), req.Content)
@@ -177,8 +178,8 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isFirst {
-		if err := h.store.UpdateTitle(id, <-titleCh); err != nil {
+	if awaitTitle != nil {
+		if err := h.store.UpdateTitle(id, awaitTitle()); err != nil {
 			slog.Error("sendMessage: UpdateTitle failed", "conversation_id", id, "error", err)
 		}
 	}
