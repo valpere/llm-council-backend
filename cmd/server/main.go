@@ -32,7 +32,7 @@ func main() {
 	client := openrouter.New(cfg.OpenRouterAPIKey)
 	c := council.New(client, cfg.CouncilModels, cfg.ChairmanModel, cfg.TitleModel)
 	store := storage.New(cfg.DataDir)
-	handler := api.New(c, store, cfg.DataDir)
+	handler := api.New(c, store, cfg.DataDir, cfg.CORSOrigins)
 
 	addr := ":" + cfg.Port
 	srv := &http.Server{Addr: addr, Handler: handler.Routes()}

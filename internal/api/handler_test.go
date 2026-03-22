@@ -121,11 +121,11 @@ func (f *fakeCouncil) CalculateAggregateRankings(_ []council.StageTwoResult, _ m
 // ---- helpers -----------------------------------------------------------------
 
 func newTestHandler(store storage.Storer, c council.Runner) http.Handler {
-	return New(c, store, "").Routes()
+	return New(c, store, "", nil).Routes()
 }
 
 func newTestHandlerWithDataDir(store storage.Storer, c council.Runner, dataDir string) http.Handler {
-	return New(c, store, dataDir).Routes()
+	return New(c, store, dataDir, nil).Routes()
 }
 
 func do(t *testing.T, handler http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -211,8 +211,8 @@ func TestCreateConversation(t *testing.T) {
 	h := newTestHandler(newFakeStore(), &fakeCouncil{})
 	w := do(t, h, http.MethodPost, "/api/conversations", nil)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	if w.Code != http.StatusCreated {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusCreated)
 	}
 	body := decodeBody(t, w)
 	id, ok := body["id"].(string)

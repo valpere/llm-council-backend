@@ -16,13 +16,14 @@ import (
 )
 
 type Handler struct {
-	council council.Runner
-	store   storage.Storer
-	dataDir string
+	council     council.Runner
+	store       storage.Storer
+	dataDir     string
+	corsOrigins []string
 }
 
-func New(c council.Runner, s storage.Storer, dataDir string) *Handler {
-	return &Handler{council: c, store: s, dataDir: dataDir}
+func New(c council.Runner, s storage.Storer, dataDir string, corsOrigins []string) *Handler {
+	return &Handler{council: c, store: s, dataDir: dataDir, corsOrigins: corsOrigins}
 }
 
 func (h *Handler) Routes() http.Handler {
@@ -35,13 +36,17 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/conversations/{id}", h.getConversation)
 	mux.HandleFunc("POST /api/conversations/{id}/message", h.sendMessage)
 	mux.HandleFunc("POST /api/conversations/{id}/message/stream", h.sendMessageStream)
-	return corsMiddleware(mux)
+	return h.corsMiddleware(mux)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func (h *Handler) corsMiddleware(next http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(h.corsOrigins))
+	for _, o := range h.corsOrigins {
+		allowed[o] = true
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:5173" || origin == "http://localhost:3000" {
+		if allowed[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -111,7 +116,7 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, conv)
+	writeJSON(w, http.StatusCreated, conv)
 }
 
 func (h *Handler) getConversation(w http.ResponseWriter, r *http.Request) {
@@ -156,14 +161,15 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Start title generation concurrently so it doesn't block RunFull.
 	// Detached from the request context so it completes even if the client disconnects.
-	var titleCh chan string
+	var awaitTitle func() string
 	if isFirst {
-		titleCh = make(chan string, 1)
+		ch := make(chan string, 1)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			titleCh <- h.council.GenerateTitle(ctx, req.Content)
+			ch <- h.council.GenerateTitle(ctx, req.Content)
 		}()
+		awaitTitle = func() string { return <-ch }
 	}
 
 	result, err := h.council.RunFull(r.Context(), req.Content)
@@ -172,8 +178,8 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isFirst {
-		if err := h.store.UpdateTitle(id, <-titleCh); err != nil {
+	if awaitTitle != nil {
+		if err := h.store.UpdateTitle(id, awaitTitle()); err != nil {
 			slog.Error("sendMessage: UpdateTitle failed", "conversation_id", id, "error", err)
 		}
 	}

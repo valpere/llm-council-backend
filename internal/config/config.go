@@ -13,6 +13,7 @@ type Config struct {
 	TitleModel       string
 	DataDir          string
 	Port             string
+	CORSOrigins      []string
 }
 
 // Validate returns an error if the configuration is missing required values.
@@ -62,6 +63,19 @@ func Load() *Config {
 		port = v
 	}
 
+	corsOrigins := []string{"http://localhost:5173", "http://localhost:3000"}
+	if v := os.Getenv("CORS_ORIGINS"); v != "" {
+		var origins []string
+		for _, o := range strings.Split(v, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+		if len(origins) > 0 {
+			corsOrigins = origins
+		}
+	}
+
 	return &Config{
 		OpenRouterAPIKey: strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
 		CouncilModels:    councilModels,
@@ -69,5 +83,6 @@ func Load() *Config {
 		TitleModel:       titleModel,
 		DataDir:          dataDir,
 		Port:             port,
+		CORSOrigins:      corsOrigins,
 	}
 }
