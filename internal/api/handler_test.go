@@ -120,7 +120,11 @@ func (f *fakeCouncil) CalculateAggregateRankings(_ []council.StageTwoResult, _ m
 // ---- helpers -----------------------------------------------------------------
 
 func newTestHandler(store storage.Storer, c council.Runner) http.Handler {
-	return New(c, store).Routes()
+	return New(c, store, "").Routes()
+}
+
+func newTestHandlerWithDataDir(store storage.Storer, c council.Runner, dataDir string) http.Handler {
+	return New(c, store, dataDir).Routes()
 }
 
 func do(t *testing.T, handler http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -148,6 +152,41 @@ func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 }
 
 // ---- tests -------------------------------------------------------------------
+
+func TestHealthLive(t *testing.T) {
+	h := newTestHandler(newFakeStore(), &fakeCouncil{})
+	w := do(t, h, http.MethodGet, "/health/live", nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+	body := decodeBody(t, w)
+	if body["status"] != "ok" {
+		t.Errorf("status field: got %v, want \"ok\"", body["status"])
+	}
+}
+
+func TestHealthReady_ok(t *testing.T) {
+	h := newTestHandlerWithDataDir(newFakeStore(), &fakeCouncil{}, t.TempDir())
+	w := do(t, h, http.MethodGet, "/health/ready", nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestHealthReady_unavailable(t *testing.T) {
+	h := newTestHandlerWithDataDir(newFakeStore(), &fakeCouncil{}, "/nonexistent/path/xyz")
+	w := do(t, h, http.MethodGet, "/health/ready", nil)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status: got %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+	body := decodeBody(t, w)
+	if body["status"] != "not ready" {
+		t.Errorf("status field: got %v, want \"not ready\"", body["status"])
+	}
+	if body["error"] != "data directory unavailable" {
+		t.Errorf("error field: got %v, want \"data directory unavailable\"", body["error"])
+	}
+}
 
 func TestHealthCheck(t *testing.T) {
 	h := newTestHandler(newFakeStore(), &fakeCouncil{})

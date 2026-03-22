@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"llm-council/internal/council"
@@ -17,15 +18,18 @@ import (
 type Handler struct {
 	council council.Runner
 	store   storage.Storer
+	dataDir string
 }
 
-func New(c council.Runner, s storage.Storer) *Handler {
-	return &Handler{council: c, store: s}
+func New(c council.Runner, s storage.Storer, dataDir string) *Handler {
+	return &Handler{council: c, store: s, dataDir: dataDir}
 }
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", h.healthCheck)
+	mux.HandleFunc("GET /health/live", h.healthLive)
+	mux.HandleFunc("GET /health/ready", h.healthReady)
 	mux.HandleFunc("GET /api/conversations", h.listConversations)
 	mux.HandleFunc("POST /api/conversations", h.createConversation)
 	mux.HandleFunc("GET /api/conversations/{id}", h.getConversation)
@@ -59,6 +63,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "LLM Council API"})
+}
+
+func (h *Handler) healthLive(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) healthReady(w http.ResponseWriter, r *http.Request) {
+	if _, err := os.Stat(h.dataDir); err != nil {
+		log.Printf("healthReady: data directory check failed: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status": "not ready",
+			"error":  "data directory unavailable",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) listConversations(w http.ResponseWriter, r *http.Request) {
