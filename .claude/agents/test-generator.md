@@ -167,7 +167,7 @@ Before outputting the test file, verify every item:
 - [ ] Storage tests use `t.TempDir()`, never `data/conversations/`
 - [ ] Table-driven tests use `t.Run(tc.name, ...)`
 - [ ] `reflect.DeepEqual` or order-independent check for slice/map comparison
-- [ ] Handler tests construct via `api.New(...)`
+- [ ] Handler tests construct via `api.New(...).Routes()`
 - [ ] `go test -race` compatible — no unprotected shared state
 - [ ] All error paths are tested, not just the happy path
 - [ ] Imports use full package paths, no `.` imports
