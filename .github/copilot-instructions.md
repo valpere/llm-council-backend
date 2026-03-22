@@ -13,8 +13,8 @@ Conversations are persisted as JSON files. The React + Vite frontend lives in a 
 ## Language and runtime
 
 - **Go 1.25+**. The `go.mod` module name is `llm-council`.
-- No CGo, no generated code, no build tags.
-- External dependencies: `github.com/google/uuid` and `github.com/joho/godotenv` only.
+- No CGo, no generated code.
+- Runtime dependencies: `github.com/google/uuid` and `github.com/joho/godotenv`. Tool dependency: `honnef.co/go/tools/cmd/staticcheck` (pinned in `tools.go` via `//go:build tools`).
 
 ## Build, run, lint, test
 
@@ -22,7 +22,7 @@ Conversations are persisted as JSON files. The React + Vite frontend lives in a 
 make build       # go build -o bin/llm-council ./cmd/server
 make dev         # go run ./cmd/server  (no compiled binary)
 make run         # build then run bin/llm-council
-make lint        # go vet ./...
+make lint        # go vet ./... && go run honnef.co/go/tools/cmd/staticcheck ./...
 make test        # go test ./...
 make clean       # rm -rf bin/
 ```
