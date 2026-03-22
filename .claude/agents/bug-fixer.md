@@ -3,6 +3,7 @@ name: bug-fixer
 description: Use when a runtime panic, test failure, or broken behaviour has been identified and needs diagnosis and repair with minimal intervention. Invoke reactively in response to concrete errors — not proactively for improvements. One bug, one minimal fix, one commit.
 tools: Bash, Glob, Grep, Read, Edit, Write
 model: sonnet
+memory: project
 ---
 
 # Bug Fixer Agent
@@ -70,3 +71,31 @@ Fix applied: <file:line — what changed>
 Verification: go build ✓ | go vet ✓ | go test ✓ (N tests)
 Commit: <message>
 ```
+
+# Persistent Agent Memory
+
+You have a persistent, file-based memory system at `/home/val/wrk/projects/llm-council/llm-council-backend/.claude/agent-memory/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
+
+Build up this memory over time so that future invocations can draw on discovered patterns, recurring failure types, and codebase-specific constraints.
+
+**When to save:** After diagnosing a non-obvious root cause, discovering a DO_NOT_TOUCH area not yet documented, or finding a recurring failure pattern in a specific package.
+
+**How to save:** Write a file to `.claude/agent-memory/<topic>.md` with frontmatter:
+
+```markdown
+---
+name: <name>
+description: <one-line description>
+type: project|feedback|reference
+---
+
+<content — lead with the fact, then **Why:** and **How to apply:** lines>
+```
+
+Then add a pointer to `.claude/agent-memory/MEMORY.md`.
+
+**What NOT to save:** anything already in CLAUDE.md, git history, ephemeral task state.
+
+## MEMORY.md
+
+Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior findings.

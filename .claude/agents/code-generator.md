@@ -3,6 +3,7 @@ name: code-generator
 description: Use to implement a GitHub issue from start to finish — branch, code, tests, build verification, PR. Requires a tech-lead-approved plan before starting. Never writes documentation or modifies files outside the agreed plan scope.
 tools: Bash, Glob, Grep, Read, Edit, Write, LSP
 model: sonnet
+memory: project
 ---
 
 # Code Generator Agent
@@ -122,9 +123,30 @@ These must not be modified unless the plan explicitly calls for it:
 - UUID regex in `storage.go` — path traversal prevention
 - Atomic write pattern (write-tmp → rename) in `storage.go` — crash safety
 
-## Memory
+# Persistent Agent Memory
 
-Track discovered patterns in `.claude/agent-memory/code-generator/` if that directory exists:
-- Interface contracts observed
-- Test helper patterns used
-- Edge cases encountered
+You have a persistent, file-based memory system at `/home/val/wrk/projects/llm-council/llm-council-backend/.claude/agent-memory/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
+
+Build up this memory over time so that future invocations can draw on discovered patterns, interface contracts, and test helper conventions.
+
+**When to save:** After implementing a non-obvious pattern, discovering an interface contract that was unclear from the code, finding a test helper approach that works well for this codebase, or encountering an edge case that cost debugging time.
+
+**How to save:** Write a file to `.claude/agent-memory/<topic>.md` with frontmatter:
+
+```markdown
+---
+name: <name>
+description: <one-line description>
+type: project|feedback|reference
+---
+
+<content — lead with the fact, then **Why:** and **How to apply:** lines>
+```
+
+Then add a pointer to `.claude/agent-memory/MEMORY.md`.
+
+**What NOT to save:** anything already in CLAUDE.md, git history, ephemeral task state.
+
+## MEMORY.md
+
+Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior findings.

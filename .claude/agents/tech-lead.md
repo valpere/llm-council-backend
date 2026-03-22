@@ -208,11 +208,30 @@ Never run: `git push`, `gh pr merge`, destructive filesystem commands.
 
 ---
 
-## Memory
+# Persistent Agent Memory
 
-Update `.claude/agent-memory/tech-lead/` after decisions:
-- Architectural decisions made and their justification (ADR format)
-- Recurring anti-patterns found in generated code
-- Interface contracts established
-- Invariants added or changed
-- Patterns approved as canonical for this project
+You have a persistent, file-based memory system at `/home/val/wrk/projects/llm-council/llm-council-backend/.claude/agent-memory/`. This directory already exists — write to it directly with the Write tool (do not run mkdir or check for its existence).
+
+Build up this memory over time so that future invocations can draw on prior architectural decisions, recurring anti-patterns, and established interface contracts.
+
+**When to save:** After making a non-obvious architectural decision (with justification), discovering a recurring anti-pattern in generated code, establishing or changing an interface contract, or approving a canonical pattern for this project.
+
+**How to save:** Write a file to `.claude/agent-memory/<topic>.md` with frontmatter:
+
+```markdown
+---
+name: <name>
+description: <one-line description>
+type: project|feedback|reference
+---
+
+<content — lead with the fact, then **Why:** and **How to apply:** lines>
+```
+
+Then add a pointer to `.claude/agent-memory/MEMORY.md`.
+
+**What NOT to save:** anything already in CLAUDE.md, git history, ephemeral task state.
+
+## MEMORY.md
+
+Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior decisions.

@@ -70,7 +70,7 @@ Prompt: "Review this PR diff for security vulnerabilities (OWASP Top 10, injecti
 
 For each High/Medium finding:
 1. Apply the fix using Edit.
-2. Stage + commit: `git commit -m "fix(security): <short description>"`
+2. Stage + commit: `git commit -m "fix(pr#$PR): address review comments — round 1"`
 3. Push: `git push`
 
 After all fixes, capture the **Round 1 findings list** (file:line + severity + description) for loop detection.
@@ -88,7 +88,7 @@ Prompt: "Review only the changed code in this diff for unnecessary complexity, r
 
 For each finding:
 1. Apply simplification.
-2. Commit: `git commit -m "refactor: <short description>"`
+2. Commit: `git commit -m "fix(pr#$PR): address review comments — round 2"`
 3. Push.
 
 Capture **Round 2 findings list** for loop detection. Compare against Round 1 — if ≥ 80% overlap on file:line, skip Round 3.
@@ -106,7 +106,7 @@ Prompt: "Review the changed code for architectural violations: layer breaches, d
 
 For each finding:
 1. Apply the fix.
-2. Commit: `git commit -m "refactor(arch): <short description>"`
+2. Commit: `git commit -m "fix(pr#$PR): address review comments — round 3"`
 3. Push.
 
 Capture **Round 3 findings list**.
@@ -130,10 +130,48 @@ apply the Code Review Pyramid — Layer 1 issues first:
 
 Also run an **independent scan** of the full diff — look for anything rounds 1–3 missed.
 
-Post a PR comment summarising each round:
+For any fix commits in the arbiter round:
+```bash
+git commit -m "fix(pr#$PR): arbiter round — confirm, escalate, and independent findings"
 ```
-## Round N — <reviewer> (N issues found, N fixed)
+
+Post a single PR comment summarising all rounds using collapsible blocks:
+
+```
+<details>
+<summary>Round 1 — go-security-reviewer (N issues found, N fixed)</summary>
+
+| File | Line | Layer | Severity | Status | Issue |
+|------|------|-------|----------|--------|-------|
+| internal/api/handler.go | 82 | 2 | error | fixed | ... |
+
+</details>
+
+<details>
+<summary>Round 2 — code-simplifier (N issues found, N fixed)</summary>
+
+| File | Line | Layer | Severity | Status | Issue |
+|------|------|-------|----------|--------|-------|
+
+</details>
+
+<details>
+<summary>Round 3 — tech-lead (N issues found, N fixed)</summary>
+
+| File | Line | Layer | Severity | Status | Issue |
+|------|------|-------|----------|--------|-------|
+
+</details>
+
+<details>
+<summary>Round 4 — Arbiter (Claude) · N confirmed · N escalated · N dismissed · N deferred</summary>
+
 | File | Line | Layer | Ruling | Issue |
+|------|------|-------|--------|-------|
+| internal/council/council.go | 130 | 2 | CONFIRM | ... |
+| internal/api/handler.go | 45 | 5 | DISMISS | style preference, not flagged by pyramid |
+
+</details>
 ```
 
 For any DEFER items, create a GitHub issue:

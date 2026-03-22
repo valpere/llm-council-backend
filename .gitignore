@@ -39,4 +39,4 @@ bin/
 .claude/settings.local.json
 .claude/.onlooking*.md
 .claude/**/*.lock
-.claude/agent-memory/
+# agent-memory is version-controlled (project-scope memories shared with team)
