@@ -8,7 +8,7 @@
 2. **Stage 2** — each model anonymously peer-reviews and ranks the other responses (labels A/B/C/D, shuffled per request to prevent bias)
 3. **Stage 3** — a designated Chairman model synthesizes a final answer
 
-Conversations are persisted as JSON files. The React + Vite frontend lives in a sibling repository (`llm-council-frontend`) and connects via this API.
+Conversations are persisted as JSON files. The React + Vite frontend lives in the `frontend/` directory and connects via this API.
 
 ## Language and runtime
 
@@ -125,3 +125,49 @@ On any failure: `data: {"type":"error","message":"..."}` followed by return.
 - When adding tests, use real file I/O with `t.TempDir()` for storage tests — do not mock `os`.
 - Run `make lint` (`go vet ./...`) before considering a change complete.
 - The branch protection on `main` requires a pull request; never push directly to `main`.
+
+---
+
+## Frontend
+
+**Stack:** React 19 + Vite 8, plain JavaScript (no TypeScript), ESM modules
+
+**Directory:** `frontend/` in the repo root
+
+**Commands:**
+```bash
+cd frontend && npm ci          # install dependencies
+cd frontend && npm run dev     # dev server at :5173 (proxies /api to :8001)
+cd frontend && npm run lint    # ESLint
+cd frontend && npm run build   # production build to frontend/dist/
+make dev-all                   # start backend + frontend together
+```
+
+**Source layout:**
+```
+frontend/src/
+  api.js              # sole API adapter — reads VITE_API_BASE, all fetch calls here
+  App.jsx             # root component — owns all application state
+  App.css
+  main.jsx            # React entry point
+  index.css           # global styles + markdown rendering styles
+  components/
+    ChatInterface.jsx  # message thread + input (one message per conversation)
+    Stage1.jsx         # tabbed individual model responses
+    Stage2.jsx         # peer rankings, aggregate table, de-anonymization
+    Stage3.jsx         # chairman synthesis or error banner
+    *.css              # co-located CSS per component
+```
+
+**Architecture constraints:**
+- No TypeScript — plain JS with JSX
+- No router — single view, conversation selected via sidebar state
+- No Redux or Context — all state lives in `App.jsx`
+- `api.js` is the only file that calls `fetch` — do not add API calls elsewhere
+- Co-located CSS: each component has a matching `.css` file in the same directory
+- `react-markdown` renders all LLM output — do not use raw HTML injection (`dangerouslySetInnerHTML`)
+- Input is one-shot: `ChatInterface.jsx` hides the input after the first message is sent
+
+**SSE streaming:** The frontend consumes SSE events from `POST /api/conversations/{id}/message/stream`. See `docs/frontend/streaming.md` for the event sequence and payload shapes.
+
+**No test suite.** `npm run lint` is the only quality gate.

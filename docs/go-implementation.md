@@ -1,6 +1,6 @@
 # Go Implementation Notes
 
-The original Python/FastAPI backend has been rewritten in Go. The frontend (React + Vite) is maintained separately in the `llm-council-frontend` repository.
+The original Python/FastAPI backend has been rewritten in Go. The frontend (React + Vite) lives in the `frontend/` directory.
 
 ## Package Structure
 
@@ -34,7 +34,7 @@ llm-council/
 └── .env                     # Local secrets (not committed)
 ```
 
-Frontend lives in the sibling repository `llm-council-frontend`.
+Frontend lives in the `frontend/` directory.
 
 ## Key Implementation Notes
 
@@ -197,7 +197,7 @@ make lint                    # go vet ./... && staticcheck ./...
 make test                    # go test ./...
 ```
 
-Frontend (separate repo):
+Frontend:
 ```bash
-cd ../llm-council-frontend && npm run dev
+cd frontend && npm run dev
 ```

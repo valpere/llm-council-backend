@@ -1,4 +1,4 @@
-.PHONY: build run dev lint vet test test-race cover check tidy clean help
+.PHONY: build run dev lint vet test test-race cover check tidy clean frontend-install frontend-dev frontend-build frontend-lint dev-all help
 
 ## build: compile the server binary to bin/llm-council
 build:
@@ -34,8 +34,8 @@ cover:
 	go tool cover -html=coverage.out
 	@rm -f coverage.out
 
-## check: full pre-flight (lint + test-race) — run before opening a PR
-check: lint test-race
+## check: lint + race tests + frontend lint (pre-PR gate)
+check: lint test-race frontend-lint
 
 ## tidy: tidy and verify go module dependencies
 tidy:
@@ -45,6 +45,26 @@ tidy:
 ## clean: remove build artifacts and coverage output
 clean:
 	rm -rf bin/ coverage.out
+
+## frontend-install: install frontend dependencies
+frontend-install:
+	cd frontend && npm ci
+
+## frontend-dev: start the Vite dev server (port 5173)
+frontend-dev:
+	cd frontend && npm run dev
+
+## frontend-build: production build
+frontend-build:
+	cd frontend && npm run build
+
+## frontend-lint: run ESLint on frontend source
+frontend-lint:
+	cd frontend && npm run lint
+
+## dev-all: start backend (port 8001) and frontend (port 5173) dev servers
+dev-all:
+	@$(MAKE) -j2 dev frontend-dev
 
 ## help: list available targets
 help:

@@ -5,8 +5,7 @@ than asking a single AI model for an answer, LLM Council assembles a council of
 models that independently respond, anonymously review each other, and have a
 designated Chairman synthesize a final answer.
 
-The frontend (React + Vite) lives in the sibling repository `llm-council-frontend`
-(separate repo on GitHub).
+The frontend (React + Vite) lives in the `frontend/` directory in this repo.
 
 ---
 
@@ -22,7 +21,7 @@ The frontend (React + Vite) lives in the sibling repository `llm-council-fronten
 | LLM gateway | [OpenRouter](https://openrouter.ai) REST API |
 | Config | Environment variables + `godotenv` |
 | ID generation | `github.com/google/uuid` |
-| Frontend | React + Vite (separate repo) |
+| Frontend | React + Vite (`frontend/` directory) |
 
 ---
 
@@ -95,7 +94,13 @@ make dev
 # → LLM Council API listening on :8001
 ```
 
-Then start the frontend from its own repository and open it in your browser.
+Then start the frontend and open it in your browser:
+
+```bash
+cd frontend && npm ci && npm run dev
+```
+
+Or run both together with `make dev-all`.
 
 ---
 
@@ -226,6 +231,35 @@ behaviour depends on the endpoint: the JSON endpoint
 (`POST /api/conversations/{id}/message`) returns HTTP 200 with an error message
 embedded in `stage3.response`, while the streaming endpoint emits a
 `{"type":"error",...}` SSE event and closes the stream.
+
+---
+
+## Frontend
+
+The React UI lives in `frontend/`. It is a single-page app built with React 19 + Vite 8 (plain JavaScript, no TypeScript).
+
+### Quick start
+
+```bash
+cd frontend && npm ci && npm run dev
+```
+
+The dev server starts on `:5173` and proxies all `/api` requests to the backend at `:8001`. Run `make dev-all` to start both together.
+
+### Directory
+
+```
+frontend/
+  src/
+    api.js               # API adapter (all fetch calls)
+    App.jsx              # root component + state
+    components/          # Stage1, Stage2, Stage3, ChatInterface, Sidebar
+  index.html
+  vite.config.js
+  package.json
+```
+
+See `docs/frontend/` for architecture, API contract, and SSE streaming docs.
 
 ---
 

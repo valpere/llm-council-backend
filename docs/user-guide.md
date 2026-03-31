@@ -38,7 +38,7 @@ echo "OPENROUTER_API_KEY=sk-or-v1-..." > .env
 go run ./cmd/server
 ```
 
-The server starts on port **8001** by default. The frontend (in the sibling `llm-council-frontend` repo) connects to this port.
+The server starts on port **8001** by default. The frontend (in the `frontend/` directory) connects to this port.
 
 ---
 
@@ -444,3 +444,7 @@ The server logs to stdout as structured JSON using `log/slog`. Log level is `INF
 {"time":"2026-03-22T09:00:00Z","level":"INFO","msg":"server starting","port":"8001"}
 {"time":"2026-03-22T09:00:05Z","level":"WARN","msg":"writeJSON: encode failed","status":200,"error":"write tcp: broken pipe"}
 ```
+
+## Frontend Usage
+
+See [`docs/frontend/user-guide.md`](frontend/user-guide.md) for the end-user UI walkthrough.

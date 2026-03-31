@@ -37,8 +37,12 @@ bin/
 !.claude/
 !.claude/**
 .claude/settings.local.json
-.claude/.onlooking*.md
 .claude/**/*.lock
+.claude/worktrees/
 # agent-memory is version-controlled (project-scope memories shared with team)
 
 data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
