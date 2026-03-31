@@ -9,7 +9,7 @@ function deAnonymizeText(text, labelToModel) {
   // Replace each "Response X" with the actual model name
   Object.entries(labelToModel).forEach(([label, model]) => {
     const modelShortName = model.split('/')[1] || model;
-    result = result.replace(new RegExp(label, 'g'), `**${modelShortName}**`);
+    result = result.split(label).join(`**${modelShortName}**`);
   });
   return result;
 }
