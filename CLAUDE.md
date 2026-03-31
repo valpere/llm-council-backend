@@ -14,7 +14,7 @@ See `docs/` for full documentation:
 ## Stack
 
 - **Backend:** Go — this repository (`llm-council`)
-- **Frontend:** React + Vite — separate repository at `../llm-council-frontend`
+- **Frontend:** React + Vite — `frontend/` directory in this repo
 - **LLM Gateway:** OpenRouter API
 - **Storage:** JSON files in `data/conversations/`
 
@@ -26,8 +26,10 @@ go run ./cmd/server
 make lint    # go vet + staticcheck
 make test    # go test ./...
 
-# Frontend (separate repo)
-cd ../llm-council-frontend && npm run dev
+# Frontend
+cd frontend && npm run dev    # dev server :5173 (proxies /api → :8001)
+cd frontend && npm run lint   # ESLint
+make dev-all                  # start both backend and frontend
 ```
 
 ## Notes
@@ -63,6 +65,8 @@ Full pipeline:
 | `code-generator` | sonnet | Implements Tech Lead-approved plans |
 | `bug-fixer` | sonnet | Targeted bug fixes; one bug, one commit |
 | `docs-maintainer` | sonnet | Post-merge doc sync only |
+| `ci-build-agent` | sonnet | Generates GitHub Actions CI workflows for Go + npm |
+| `pm-issue-writer` | sonnet | Drafts RFC 2119 GitHub issues with structured frontmatter |
 
 ### Plans
 

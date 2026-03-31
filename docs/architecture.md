@@ -47,7 +47,7 @@ User Query
 
 ### Frontend
 
-Single-page React + Vite application in the separate `llm-council-frontend` repository (`../llm-council-frontend`).
+Single-page React + Vite application in the `frontend/` directory.
 
 | Component | Responsibility |
 |-----------|---------------|
@@ -141,3 +141,7 @@ Conversations are stored as individual JSON files in `data/conversations/{uuid}.
 ## External Services
 
 - **OpenRouter** (`https://openrouter.ai/api/v1/chat/completions`): Unified gateway to multiple LLM providers. Requires `OPENROUTER_API_KEY`.
+
+## Frontend
+
+See [`docs/frontend/architecture.md`](frontend/architecture.md) for the React component tree, state model, and frontend-specific design decisions.
