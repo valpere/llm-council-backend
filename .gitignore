@@ -38,6 +38,7 @@ bin/
 !.claude/**
 .claude/settings.local.json
 .claude/**/*.lock
+.claude/worktrees/
 # agent-memory is version-controlled (project-scope memories shared with team)
 
 data/
