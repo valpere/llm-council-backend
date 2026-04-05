@@ -249,7 +249,8 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := h.store.AddMessage(id, map[string]string{"role": "user", "content": req.Content}); err != nil {
-		send(map[string]string{"type": "error", "message": err.Error()})
+		slog.Error("sendMessageStream: AddMessage (user) failed", "conversation_id", id, "error", err)
+		send(map[string]string{"type": "error", "message": "Failed to save your message. Please try again."})
 		return
 	}
 
@@ -269,7 +270,8 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	send(map[string]string{"type": "stage1_start"})
 	stage1, err := h.council.Stage1CollectResponses(ctx, req.Content)
 	if err != nil {
-		send(map[string]string{"type": "error", "message": err.Error()})
+		slog.Error("sendMessageStream: Stage1 failed", "conversation_id", id, "error", err)
+		send(map[string]string{"type": "error", "message": "The council failed to collect responses. Please try again."})
 		return
 	}
 	if len(stage1) == 0 {
@@ -282,7 +284,8 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	send(map[string]string{"type": "stage2_start"})
 	stage2, labelToModel, err := h.council.Stage2CollectRankings(ctx, req.Content, stage1)
 	if err != nil {
-		send(map[string]string{"type": "error", "message": err.Error()})
+		slog.Error("sendMessageStream: Stage2 failed", "conversation_id", id, "error", err)
+		send(map[string]string{"type": "error", "message": "The council failed to collect peer rankings. Please try again."})
 		return
 	}
 	aggregateRankings, consensusW := h.council.CalculateAggregateRankings(stage2, labelToModel)
@@ -300,7 +303,8 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	send(map[string]string{"type": "stage3_start"})
 	stage3, err := h.council.Stage3SynthesizeFinal(ctx, req.Content, stage1, stage2, consensusW)
 	if err != nil {
-		send(map[string]string{"type": "error", "message": err.Error()})
+		slog.Error("sendMessageStream: Stage3 failed", "conversation_id", id, "error", err)
+		send(map[string]string{"type": "error", "message": "The chairman failed to synthesize a final answer. Please try again."})
 		return
 	}
 	send(map[string]any{"type": "stage3_complete", "data": stage3})
