@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown';
+import { modelShortName } from '../utils';
 import './Stage3.css';
 
 export default function Stage3({ finalResponse, error }) {
@@ -17,7 +18,7 @@ export default function Stage3({ finalResponse, error }) {
       ) : (
         <div className="final-response">
           <div className="chairman-label">
-            Chairman: {finalResponse.model.split('/')[1] || finalResponse.model}
+            Chairman: {modelShortName(finalResponse.model)}
           </div>
           <div className="final-text markdown-content">
             <ReactMarkdown>{finalResponse.response}</ReactMarkdown>
