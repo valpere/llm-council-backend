@@ -1,3 +1,6 @@
+> **v1 reference — archived.** This document describes the implementation on `archive/v1`.
+> For the active v2 planning documents see [`council-research-synthesis.md`](council-research-synthesis.md) and [`council-research-gaps.md`](council-research-gaps.md).
+
 # Architecture
 
 LLM Council is a web application that implements a **3-stage deliberation system** using multiple LLMs collaboratively. Rather than querying a single model, users interact with a "council" of models that individually respond, peer-review each other, and have a designated "Chairman" synthesize a final answer.

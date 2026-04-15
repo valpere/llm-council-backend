@@ -1,3 +1,10 @@
+> **This document describes the v1 implementation**, archived on the `archive/v1` branch.
+> The repository is currently in the **planning phase for v2**.
+> See [`docs/council-research-synthesis.md`](docs/council-research-synthesis.md) and
+> [`docs/council-research-gaps.md`](docs/council-research-gaps.md) for the current source of truth.
+
+---
+
 # LLM Council — Backend
 
 A Go HTTP backend implementing a **3-stage multi-LLM deliberation system**. Rather

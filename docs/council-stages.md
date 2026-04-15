@@ -1,3 +1,6 @@
+> **v1 reference — archived.** This document describes the implementation on `archive/v1`.
+> For the active v2 planning documents see [`council-research-synthesis.md`](council-research-synthesis.md) and [`council-research-gaps.md`](council-research-gaps.md).
+
 # Council Stages
 
 The deliberation pipeline runs three sequential stages. Within Stage 1 and Stage 2, model queries run concurrently.

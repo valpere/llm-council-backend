@@ -7,6 +7,16 @@ The previous implementation is preserved on `archive/v1` for reference.
 
 ---
 
+## Resolved decisions
+
+### Context model — stateless per query
+
+Each question is a new, independent council run with no memory of prior turns. A
+conversation record exists for UI history only; it does not feed back into the council.
+This is intentional for the first stage.
+
+---
+
 ## 1. Things the synthesis does not address — design intentionally
 
 ### 1.1 Consensus metric: Kendall's W vs. embedding cosine similarity
@@ -40,13 +50,7 @@ The synthesis covers positional bias and authority bias but not this specific ri
 **Design decision required:** Use separate ranker models, or accept self-evaluation with
 anonymisation as sufficient mitigation?
 
-### 1.3 Context model — ✅ resolved: stateless per query
-
-Each question is a new, independent council run with no memory of prior turns. A
-conversation record exists for UI history only; it does not feed back into the council.
-This is intentional for the first stage.
-
-### 1.4 Council type: model set, strategy, or both?
+### 1.3 Council type: model set, strategy, or both?
 
 The synthesis describes multiple strategies (Voting, Generate→Rank→Refine, Debate, MoA,
 Peer Review) as equally available. In practice, adding a new strategy requires either
@@ -60,6 +64,26 @@ redesigning the core interface or adding a dispatch layer. The two dimensions:
 
 **Design decision required:** Which scope for "first stage" — model sets only, or strategy
 variants too?
+
+### 1.4 LCCP first-stage scope
+
+The synthesis presents a 12-state LCCP state machine with 4 configuration profiles and 4
+conformance levels. For a first build, the implementation scope must be scoped explicitly.
+
+If the first stage is "Karpathy peer review only, single round, no refinement," the state
+machine reduces to:
+```
+INIT → GENERATE → VALIDATE_GENERATION → EVALUATE → VALIDATE_EVALUATION
+     → AGGREGATE → DECIDE → FINALIZE → TERMINATE  (no REFINE loop)
+```
+
+Key scoping questions:
+- Is a REFINE loop in scope for the first build, or deferred?
+- Which conformance level is the target: Core, Safe, Robust, or Auditable?
+- Are BestSoFar tracking and fallback finalization modes required from the start?
+
+**Design decision required:** Explicitly state which LCCP states, invariants, and
+conformance level are in scope for v1. This decision drives the entire architecture.
 
 ### 1.5 Quorum enforcement
 
@@ -98,20 +122,21 @@ OpenRouter) for ranking responses, with explicit failure handling when parsing f
 
 ---
 
-## 2. Ambiguous thoughts in the synthesis
+## 2. Under-specified recommendations in the synthesis
 
-### 2.1 Convergence criteria assume embedding infrastructure
+### 2.1 Convergence criteria: which metric for which strategy?
 
-§5.3 presents cosine embedding similarity as the primary convergence mechanism. But:
-- Embedding calls add latency and cost per round.
-- For strategies that produce rank lists (peer review), Kendall's W is sufficient and
-  requires no embedding calls.
-- For strategies that don't produce rank lists (Debate, MoA), convergence needs a
-  different approach.
+§5.3 presents cosine embedding similarity as the primary convergence mechanism. But the
+synthesis already covers Kendall's W (for rank-order strategies) and mentions LLM-as-Judge
+as an option. The synthesis does not map metric to strategy:
 
-**LLM-as-Judge** (prompt a model, output CONVERGED/DIVERGED) is the simplest option with
-no infrastructure dependency. The synthesis mentions it but buries it as a secondary option.
-For a first-stage Go implementation, it should be the default.
+- **Rank-order strategies** (peer review): Kendall's W is sufficient, no embedding calls.
+- **Free-text strategies** (Debate, MoA): cosine similarity requires embedding
+  infrastructure; LLM-as-Judge requires no extra dependencies.
+
+The remaining unresolved question is not which metric to use in general — the synthesis
+already addresses that — but which metric to use per strategy variant, and whether
+LLM-as-Judge should be the v1 default for strategies without a natural rank ordering.
 
 ### 2.2 "Preserve unique insights" is not operationalised
 
@@ -134,13 +159,17 @@ strategy per type. The synthesis uses the terms interchangeably. In the new impl
 these should be distinct concepts: a **strategy** is a deliberation algorithm; a **council
 type** is a named configuration combining a strategy with a model set and parameters.
 
-### 2.5 The Chairman prompt receives untrusted Stage 2 input
+### 2.5 The Chairman prompt receives untrusted Stage 2 input — internal contradiction
 
-In the Karpathy peer-review design, Stage 3 passes raw Stage 2 ranking text from each
-council model directly into the Chairman's prompt. The synthesis (§6, §7 Hazard: Prompt
-Injection Propagation) recommends passing only a validated summary, not raw model output.
-These are in tension. A decision is needed on whether Stage 2 input to Stage 3 is
-sanitised/structured or passed raw.
+The synthesis contradicts itself on this point:
+
+- §2.5 (Karpathy design): "Chairman receives all responses + all reviews" — raw Stage 2.
+- §7 (Prompt Injection Propagation hazard): "pass only arbiter's summary, not raw output."
+- §9.9 (Security): "Never pass raw responses; pass arbiter's validated summary."
+
+The Karpathy design passes raw Stage 2 output; the safety recommendations say not to. A
+decision is needed: sanitise/structure Stage 2 input to Stage 3, or accept the risk with
+prompt-level mitigations?
 
 ---
 
@@ -148,13 +177,13 @@ sanitised/structured or passed raw.
 
 ### 3.1 Council type selection scope in the API
 
-Now that context is stateless per query (§1.3), council type selection is per-request
-rather than per-conversation. The remaining question is the API shape:
+Given that context is stateless per query, council type selection is per-request. The
+remaining question is the API shape:
 - Field in the POST request body (most explicit)
 - Query parameter (simpler, less RESTful)
 - Server-wide config only (archive/v1 approach; no selection at runtime)
 
-### 3.3 Should Stage 3 support graceful non-synthesis?
+### 3.2 Should Stage 3 support graceful non-synthesis?
 
 When council answers are strongly contradictory (consensus near 0), the Chairman should be
 able to surface "the council could not reach a synthesis" as a first-class outcome rather
@@ -162,7 +191,7 @@ than being forced to synthesise anyway. The LCCP fallback chain — synthesize_t
 select_best → fallback_best_so_far — is not in the archive/v1 implementation and needs an
 explicit decision.
 
-### 3.4 Streaming architecture: stage events vs. token streaming
+### 3.3 Streaming architecture: stage events vs. token streaming
 
 Archive/v1 streams stage-completion events over SSE (stage1_start, stage1_complete,
 stage2_start, …). Token-by-token streaming within a stage would require passing a

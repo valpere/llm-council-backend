@@ -4,40 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-LLM Council — a 3-stage multi-LLM deliberation system. Council models independently answer a query, anonymously peer-review each other, and a Chairman model synthesizes a final answer.
+LLM Council — a multi-LLM deliberation system. Council models independently answer a query,
+anonymously peer-review each other, and a Chairman model synthesizes a final answer.
 
-See `docs/` for full documentation:
-- `docs/architecture.md` — system overview, components, data flow
-- `docs/council-stages.md` — detailed stage logic and anonymization
-- `docs/go-implementation.md` — Go package structure and implementation notes
+**Status: planning phase.** The v1 implementation is archived on `archive/v1`. A rewrite
+is in progress starting from the research documents below.
 
-## Stack
+See `docs/` for the current source of truth:
+- `docs/council-research-synthesis.md` — aggregated design research (strategies, LCCP state machine, Go patterns, production considerations)
+- `docs/council-research-gaps.md` — design decisions and open questions to resolve before building
 
-- **Backend:** Go — this repository (`llm-council`)
-- **Frontend:** React + Vite — `frontend/` directory in this repo
+The following docs describe the **archived v1** implementation and are retained for reference only:
+- `docs/architecture.md`, `docs/council-stages.md`, `docs/go-implementation.md`, `docs/user-guide.md`
+
+## Stack (planned for v2)
+
+- **Backend:** Go
 - **LLM Gateway:** OpenRouter API
-- **Storage:** JSON files in `data/conversations/`
-
-## Development
-
-```bash
-# Backend (this repo)
-go run ./cmd/server
-make lint    # go vet + staticcheck
-make test    # go test ./...
-
-# Frontend
-cd frontend && npm run dev    # dev server :5173 (proxies /api → :8001)
-cd frontend && npm run lint   # ESLint
-make dev-all                  # start both backend and frontend
-```
-
-## Notes
-
-- Run backend from repo root (not from `cmd/server/`)
-- API key in `.env`: `OPENROUTER_API_KEY=sk-or-v1-...`
-- Backend port: 8001 (frontend dev proxy points to this)
-- Stage 2 `labelToModel` mapping is ephemeral — not persisted, only returned in API response
+- **API key:** `.env` → `OPENROUTER_API_KEY=sk-or-v1-...`
 
 ## Workflow
 

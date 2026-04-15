@@ -899,7 +899,7 @@ type StoppingCriterion interface {
     ShouldStop(ctx context.Context, state *CouncilState) (bool, *StoppingDecision)
 }
 
-// Four built-in criteria:
+// Five built-in criteria:
 // 1. HardLimitCriterion (rounds, budget, wall-clock)
 // 2. QualityThresholdCriterion (average quality above target)
 // 3. ConsensusAgreementCriterion (pairwise agreement + stability)

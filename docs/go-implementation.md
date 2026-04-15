@@ -1,3 +1,6 @@
+> **v1 reference — archived.** This document describes the implementation on `archive/v1`.
+> For the active v2 planning documents see [`council-research-synthesis.md`](council-research-synthesis.md) and [`council-research-gaps.md`](council-research-gaps.md).
+
 # Go Implementation Notes
 
 The original Python/FastAPI backend has been rewritten in Go. The frontend (React + Vite) lives in the `frontend/` directory.
