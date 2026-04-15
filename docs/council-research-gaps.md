@@ -40,22 +40,11 @@ The synthesis covers positional bias and authority bias but not this specific ri
 **Design decision required:** Use separate ranker models, or accept self-evaluation with
 anonymisation as sufficient mitigation?
 
-### 1.3 Multi-turn context propagation
+### 1.3 Context model — ✅ resolved: stateless per query
 
-The most important unresolved question for a "conversational manner" server.
-
-A council run receives a single query. For multi-turn conversations, the prior context must
-be passed somehow. Options with trade-offs:
-
-| Option | Description | Risk |
-|---|---|---|
-| Pass all prior messages | Full history to every council model | Context window overflow; Stage 1/2/3 internal detail from prior turns pollutes next turn |
-| Pass user turns only | Prior user queries, not council Stage 1/2/3 detail | Models know what was asked but not what was answered |
-| Pass compressed summary | Chairman-generated summary of prior turns | Compression loss; introduces a summary bottleneck (see synthesis §7 hazard #13) |
-| Stateless (archive/v1 approach) | Each turn is independent | No continuity; user must restate context each turn |
-
-**Design decision required:** Which option, and at which API layer (council engine or
-request handler)?
+Each question is a new, independent council run with no memory of prior turns. A
+conversation record exists for UI history only; it does not feed back into the council.
+This is intentional for the first stage.
 
 ### 1.4 Council type: model set, strategy, or both?
 
@@ -157,28 +146,21 @@ sanitised/structured or passed raw.
 
 ## 3. Unclear design questions
 
-### 3.1 Does "conversational manner" mean the council has memory?
+### 3.1 Council type selection scope in the API
 
-If each council run is stateless (each turn independent), a conversation is purely a UI
-container. The council models have no knowledge of prior turns. Whether statelessness is
-intentional (clean deliberation per turn) or an unaddressed gap determines whether
-multi-turn context (§1.3) is a first-stage requirement.
+Now that context is stateless per query (§1.3), council type selection is per-request
+rather than per-conversation. The remaining question is the API shape:
+- Field in the POST request body (most explicit)
+- Query parameter (simpler, less RESTful)
+- Server-wide config only (archive/v1 approach; no selection at runtime)
 
-### 3.2 Should Stage 3 support graceful non-synthesis?
+### 3.3 Should Stage 3 support graceful non-synthesis?
 
 When council answers are strongly contradictory (consensus near 0), the Chairman should be
 able to surface "the council could not reach a synthesis" as a first-class outcome rather
 than being forced to synthesise anyway. The LCCP fallback chain — synthesize_top_k →
 select_best → fallback_best_so_far — is not in the archive/v1 implementation and needs an
 explicit decision.
-
-### 3.3 Where does council type selection live in the API?
-
-- **Per-request** (in POST body) — most flexible; allows mixing council types within one
-  conversation.
-- **Per-conversation** (set at creation, locked) — council type is part of the
-  conversation's identity; consistent across turns; must be stored with the conversation.
-- **Server-wide** (config only) — simplest; current archive/v1 behaviour.
 
 ### 3.4 Streaming architecture: stage events vs. token streaming
 
