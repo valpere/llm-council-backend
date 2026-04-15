@@ -5,7 +5,7 @@ The frontend communicates with the Go backend (port 8001 by default) via REST + 
 ## Design Constraints
 
 - **One question per conversation.** Each conversation stores exactly one user message and one assistant message. Sending a second message to an existing conversation is not supported by the UI — the frontend creates a new conversation for each question.
-- **`metadata` is ephemeral.** The `label_to_model` and `aggregate_rankings` fields are only returned during the streaming response and are not persisted. `GET /api/conversations/{id}` does not include them.
+- **`metadata` is ephemeral (v1).** The `label_to_model` and `aggregate_rankings` fields are only returned during the streaming response and are not persisted. `GET /api/conversations/{id}` does not include them. **v2 note:** the resolved design decision for v2 is to persist full metadata with every assistant message — see `docs/council-research-gaps.md`.
 
 ---
 

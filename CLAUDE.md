@@ -20,8 +20,20 @@ The following docs describe the **archived v1** implementation and are retained 
 ## Stack (planned for v2)
 
 - **Backend:** Go
+- **Frontend:** React 19 + Vite 8, plain JavaScript (no TypeScript) — lives in `frontend/`
 - **LLM Gateway:** OpenRouter API
 - **API key:** `.env` → `OPENROUTER_API_KEY=sk-or-v1-...`
+
+## Frontend architecture rules (immutable)
+
+These constraints are enforced by the `tech-lead` agent and must not be violated:
+
+1. **Components are pure UI.** No direct `fetch` or `api.js` calls from any component.
+2. **`src/api.js` is the adapter boundary.** `onEvent(type, event)` is the only interface `App.jsx` sees. Raw SSE lines and HTTP status codes never leak past this layer.
+3. **`App.jsx` owns all state.** Only `App.jsx` writes the assistant message shape via `setCurrentConversation`.
+4. **`react-markdown` is the only renderer for LLM output.** Inserting raw HTML is forbidden — it is an XSS risk with LLM-generated content.
+
+See `docs/frontend/` for the API contract, SSE streaming spec, component architecture, and user guide.
 
 ## Workflow
 
