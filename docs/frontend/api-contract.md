@@ -5,7 +5,7 @@ The frontend communicates with the Go backend (port 8001 by default) via REST + 
 ## Design Constraints
 
 - **One question per conversation.** Each conversation stores exactly one user message and one assistant message. Sending a second message to an existing conversation is not supported by the UI — the frontend creates a new conversation for each question.
-- **`metadata` is ephemeral.** The `label_to_model` and `aggregate_rankings` fields are only returned during the streaming response and are not persisted. `GET /api/conversations/{id}` does not include them.
+- **`metadata` is ephemeral (v1).** The `label_to_model` and `aggregate_rankings` fields are only returned during the streaming response and are not persisted. `GET /api/conversations/{id}` does not include them. **v2 note:** metadata will be persisted with every assistant message; the v2 schema extends v1 with two new fields: `council_type` (string) and `consensus_w` (float, Kendall's W score). See `docs/council-research-gaps.md`.
 
 ---
 
@@ -232,3 +232,8 @@ The backend allows:
 - Origins: `http://localhost:5173`, `http://localhost:3000`
 - Methods: `GET`, `POST`, `OPTIONS`
 - Headers: `Content-Type`
+
+> **Deployment scope:** This API is designed for localhost use only. All endpoints are
+> unauthenticated. CORS origin restrictions do not protect server-side callers (curl,
+> server-side fetch). Before any non-localhost deployment, an authentication layer must
+> be added.

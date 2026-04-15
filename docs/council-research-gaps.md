@@ -17,220 +17,205 @@ This is intentional for the first stage.
 
 ---
 
-## 1. Things the synthesis does not address — design intentionally
+### Consensus metric — Kendall's W for rank-order strategies
 
-### 1.1 Consensus metric: Kendall's W vs. embedding cosine similarity
+Peer review (Stage 2 produces ordered rankings) maps directly to Kendall's W — no
+external embedding calls, measures exactly rank agreement. For free-text strategies
+(Debate, MoA), LLM-as-Judge is the v1 default (no embedding infrastructure required).
+Cosine similarity is deferred until free-text strategies are added.
 
-The synthesis covers cosine similarity at length but never mentions Kendall's coefficient
-of concordance (W). These solve different problems:
+The W-to-prose translation from archive/v1 is carried forward:
+- W ≥ 0.70 → "synthesize confidently"
+- 0.40 ≤ W < 0.70 → "acknowledge alternatives"
+- W < 0.40 → "present multiple perspectives"
 
-- **Kendall's W** — measures agreement across multiple *rank orderings*. Correct when Stage
-  2 produces ranked lists. Requires no external embedding calls. The archive/v1
-  implementation uses this.
-- **Cosine similarity** — measures *text content* similarity. Correct for strategies where
-  models produce free-text answers with no ranking (Debate, MoA). Requires an embedding
-  API or local model.
+---
 
-**Design decision required:** Which strategies will be supported in v1, and therefore which
-consensus metric(s) are needed?
+### Self-evaluation paradox — anonymization is sufficient mitigation for v1
 
-The archive/v1 implementation also translated W into prose for the Chairman prompt via a
-threshold table (W ≥ 0.70 → "synthesize confidently", 0.40–0.70 → "acknowledge
-alternatives", < 0.40 → "present multiple perspectives"). This W-to-prose pattern avoids
-passing raw floats to the LLM and is worth carrying forward.
+Separate ranker models add cost and operational complexity with uncertain benefit.
+Mitigation: shuffled label assignment (`rand.Perm`) per request so no model is
+systematically "Response A". Self-identification is probabilistic, not deterministic.
+Separate ranker pools are a named council type variant, not a v1 requirement.
 
-### 1.2 The self-evaluation paradox in Stage 2
+---
 
-The Karpathy peer-review design uses the **same models** as both generators (Stage 1) and
-rankers (Stage 2). Anonymisation via shuffled labels (A, B, C…) reduces but does not
-eliminate self-identification bias — models may recognise their own writing style.
+### Council type scope — model sets only for v1; strategy abstraction deferred
 
-The synthesis covers positional bias and authority bias but not this specific risk.
+A "council type" is a named configuration: a fixed strategy (Karpathy peer-review)
+combined with a configurable model set and parameters. Multiple council types with
+different model sets require zero interface changes. Strategy variants require a dispatch
+layer and are out of scope until the peer-review design is proven.
 
-**Design decision required:** Use separate ranker models, or accept self-evaluation with
-anonymisation as sufficient mitigation?
+---
 
-### 1.3 Council type: model set, strategy, or both?
+### LCCP first-stage scope — Core conformance, single round, no REFINE loop
 
-The synthesis describes multiple strategies (Voting, Generate→Rank→Refine, Debate, MoA,
-Peer Review) as equally available. In practice, adding a new strategy requires either
-redesigning the core interface or adding a dispatch layer. The two dimensions:
-
-1. **Model set** — same algorithm, different models ("expert council" vs. "fast council").
-   Cheapest; no interface change needed.
-2. **Strategy** — different deliberation algorithm per type. Requires a strategy abstraction
-   or dispatcher.
-3. **Both** — a full registry combining model set and strategy per named council type.
-
-**Design decision required:** Which scope for "first stage" — model sets only, or strategy
-variants too?
-
-### 1.4 LCCP first-stage scope
-
-The synthesis presents a 12-state LCCP state machine with 4 configuration profiles and 4
-conformance levels. For a first build, the implementation scope must be scoped explicitly.
-
-If the first stage is "Karpathy peer review only, single round, no refinement," the state
-machine reduces to:
+Effective state machine for v1:
 ```
 INIT → GENERATE → VALIDATE_GENERATION → EVALUATE → VALIDATE_EVALUATION
-     → AGGREGATE → DECIDE → FINALIZE → TERMINATE  (no REFINE loop)
+     → AGGREGATE → DECIDE → FINALIZE → TERMINATE  (+ FAIL branch at any node)
 ```
 
-Key scoping questions:
-- Is a REFINE loop in scope for the first build, or deferred?
-- Which conformance level is the target: Core, Safe, Robust, or Auditable?
-- Are BestSoFar tracking and fallback finalization modes required from the start?
-
-**Design decision required:** Explicitly state which LCCP states, invariants, and
-conformance level are in scope for v1. This decision drives the entire architecture.
-
-### 1.5 Quorum enforcement
-
-If some council models fail to respond, the deliberation degrades silently. For the
-peer-review design, if only one model responds, Stage 2 ranking is meaningless (a model
-ranking its own answer). Kendall's W returns 0 for fewer than 2 rankers, but without a
-quorum gate, Stage 3 proceeds anyway.
-
-The synthesis defines `M_min` (minimum quorum) as a hard requirement. The new
-implementation should enforce it explicitly with a clear error response rather than
-producing a degenerate result.
-
-**Design decision required:** What is `M_min` per council type? What is the response when
-quorum is not met — error, or fallback to single-model answer?
-
-### 1.6 Metadata persistence per message
-
-The `labelToModel` mapping, aggregate rankings, and consensus score are produced per
-council run. If not stored with the conversation message, audit and replay are impossible.
-The synthesis recommends full traceability (Invariant I4).
-
-**Design decision required:** Store full metadata with every assistant message, or treat
-it as ephemeral? If stored, what schema?
-
-### 1.7 Structured output vs. free-text parsing for rankings
-
-In archive/v1, Stage 2 rankings were extracted from free-text model output via regex.
-The failure mode (model deviates from expected format) silently produces an empty ranking,
-which receives a mid-rank imputation in Kendall's W — degrading the consensus score with
-no warning.
-
-The synthesis recommends structured JSON output as best practice.
-
-**Design decision required:** Require JSON output (via `response_format: json_object` on
-OpenRouter) for ranking responses, with explicit failure handling when parsing fails?
+Explicitly deferred: REFINE loop, BestSoFar tracking, fallback finalization modes
+(synthesize_top_k → select_best → fallback_best_so_far). Target: Core conformance level.
+Robust and Auditable conformance are post-v1. This is the scope-limiting decision that
+drives the entire architecture.
 
 ---
 
-## 2. Under-specified recommendations in the synthesis
+### Quorum enforcement — M_min = ⌈N/2⌉ + 1, minimum 2; failure → error
 
-### 2.1 Convergence criteria: which metric for which strategy?
-
-§5.3 presents cosine embedding similarity as the primary convergence mechanism. But the
-synthesis already covers Kendall's W (for rank-order strategies) and mentions LLM-as-Judge
-as an option. The synthesis does not map metric to strategy:
-
-- **Rank-order strategies** (peer review): Kendall's W is sufficient, no embedding calls.
-- **Free-text strategies** (Debate, MoA): cosine similarity requires embedding
-  infrastructure; LLM-as-Judge requires no extra dependencies.
-
-The remaining unresolved question is not which metric to use in general — the synthesis
-already addresses that — but which metric to use per strategy variant, and whether
-LLM-as-Judge should be the v1 default for strategies without a natural rank ordering.
-
-### 2.2 "Preserve unique insights" is not operationalised
-
-The synthesis repeatedly recommends "explicitly prompt synthesis to preserve unique
-insights." But neither the synthesis nor the Chairman prompt in archive/v1 defines what
-makes an insight "unique" or how to distinguish a fringe claim from a minority-but-correct
-insight. This is stated as a mitigation but not specified.
-
-### 2.3 Trust weighting has no acquisition path
-
-§5.1 and §9.4 reference trust-weighted scoring. The synthesis does not describe how trust
-values are initialised, calibrated, or updated. Without a ground-truth oracle, trust
-weights cannot be meaningfully set. For a first-stage implementation with no evaluation
-framework, this feature should be deferred or treated as uniform weights.
-
-### 2.4 "Council type" and "strategy" are conflated
-
-§2 describes strategies. §11.5 describes a council type registry with model IDs and
-strategy per type. The synthesis uses the terms interchangeably. In the new implementation
-these should be distinct concepts: a **strategy** is a deliberation algorithm; a **council
-type** is a named configuration combining a strategy with a model set and parameters.
-
-### 2.5 The Chairman prompt receives untrusted Stage 2 input — internal contradiction
-
-The synthesis contradicts itself on this point:
-
-- §2.5 (Karpathy design): "Chairman receives all responses + all reviews" — raw Stage 2.
-- §7 (Prompt Injection Propagation hazard): "pass only arbiter's summary, not raw output."
-- §9.9 (Security): "Never pass raw responses; pass arbiter's validated summary."
-
-The Karpathy design passes raw Stage 2 output; the safety recommendations say not to. A
-decision is needed: sanitise/structure Stage 2 input to Stage 3, or accept the risk with
-prompt-level mitigations?
+If Stage 1 returns fewer than M_min successful responses, return an explicit error to the
+caller. A single-model Stage 2 ranking is meaningless (a model ranking its own answer).
+Within-quorum partial failures (some models fail but M_min succeed) are tolerated.
+The quorum threshold is a council type configuration parameter, not hardcoded.
 
 ---
 
-## 3. Unclear design questions
+### Metadata persistence — store full metadata with every assistant message
 
-### 3.1 Council type selection scope in the API
+Schema addition to the assistant message:
+```json
+{
+  "role": "assistant",
+  "stage1": [...],
+  "stage2": [...],
+  "stage3": {...},
+  "metadata": {
+    "council_type": "default",
+    "label_to_model": {"Response A": "model-x", ...},
+    "aggregate_rankings": [...],
+    "consensus_w": 0.72
+  }
+}
+```
 
-Given that context is stateless per query, council type selection is per-request. The
-remaining question is the API shape:
-- Field in the POST request body (most explicit)
-- Query parameter (simpler, less RESTful)
-- Server-wide config only (archive/v1 approach; no selection at runtime)
-
-### 3.2 Should Stage 3 support graceful non-synthesis?
-
-When council answers are strongly contradictory (consensus near 0), the Chairman should be
-able to surface "the council could not reach a synthesis" as a first-class outcome rather
-than being forced to synthesise anyway. The LCCP fallback chain — synthesize_top_k →
-select_best → fallback_best_so_far — is not in the archive/v1 implementation and needs an
-explicit decision.
-
-### 3.3 Streaming architecture: stage events vs. token streaming
-
-Archive/v1 streams stage-completion events over SSE (stage1_start, stage1_complete,
-stage2_start, …). Token-by-token streaming within a stage would require passing a
-streaming callback through the council pipeline. The design choice affects the core LLM
-client interface.
+Old conversation files (no `metadata` field) fail gracefully via zero-value defaults
+in Go struct unmarshalling.
 
 ---
 
-## 4. Production constraints to design for from the start
+### Structured JSON output for Stage 2 rankings
 
-### 4.1 JSON file storage has known limits
+Use `response_format: json_object` on OpenRouter for Stage 2 ranking responses.
+Schema: `{"rankings": ["Response C", "Response A", "Response B", "Response D"]}`.
+If JSON parsing fails: log `slog.Warn`, treat as missing ranking (existing midrank
+imputation in Kendall's W handles it). Replaces the silent regex failure mode from v1.
 
-A `List()` that reads every conversation file is O(n) on disk. With many long conversations
-storing full Stage 1/2/3 responses per message, this will get slow. The storage abstraction
-(a `Storer` interface over a pluggable backend) should be designed from the start to allow
-replacing the JSON backend later without rewriting handlers.
+---
 
-### 4.2 OpenRouter model lifecycle
+### Trust weighting — deferred; uniform weights in v1
 
-Models on OpenRouter are deprecated, renamed, and temporarily unavailable. A council type
-registry that stores specific model IDs by string will break when those IDs change. The
-new implementation needs a model configuration layer that can be updated without redeploying,
-separate from the council logic.
+Trust weighting requires a calibration mechanism (ground-truth oracle or historical
+performance data) that doesn't exist. Uniform weights are the correct default. Defer
+until an evaluation framework exists.
 
-### 4.3 The `CalculateAggregateRankings` placement
+---
 
-In archive/v1, `CalculateAggregateRankings` lived on the `Runner` interface — a pure
-computation function on a behaviour interface. Any new strategy implementation would also
-need to satisfy it regardless of whether it produces rankings. In the new design this
-should be a package-level function (or belong to a separate ranking/metrics layer), not
-part of the deliberation interface.
+### Strategy vs. council type — distinct concepts in code and API
 
-### 4.4 Load-bearing infrastructure tasks before extending the API surface
+- **Strategy:** A deliberation algorithm (`PeerReview`, `MajorityVoting`, `MoA`). Pure
+  behavior, no model specifics. Typed constant/enum in Go.
+- **Council type:** A named, user-selectable configuration combining strategy + model
+  set + parameters (`"default"`, `"expert"`, `"fast"`). User-facing.
 
-The following were pending in archive/v1 and remain relevant for any new build:
+In the API, the field is `council_type` (string name). Strategy is resolved server-side
+from the council type registry. Users never specify a strategy directly.
+
+---
+
+### Chairman input — parsed/structured rankings, not raw Stage 2 prose
+
+The Chairman receives parsed rankings formatted as structured attribution:
+"Model X ranked these responses: 1st: Response C, 2nd: Response A, ...". The Chairman
+prompt is constructed from Go structs, not by concatenating raw LLM output. With
+structured JSON output in Stage 2 (see above), the ranking content contains no
+user-controlled text — only server-assigned labels.
+
+This resolves the internal synthesis contradiction: §2.5 (pass raw output) vs. §7/§9.9
+(pass only validated summary). Middle ground: parsed structure, no full sanitization pass.
+
+---
+
+### Council type selection API shape — field in POST request body
+
+```json
+POST /api/conversations/{id}/message
+{"content": "What is the best sorting algorithm?", "council_type": "default"}
+```
+
+`council_type` is optional; defaults to server-configured default. Server-wide config
+only (archive/v1 approach) is inadequate once multiple council types exist. Query
+parameters are less discoverable and harder to validate.
+
+---
+
+### Stage 3 graceful non-synthesis — deferred to post-v1
+
+The W-to-prose translation already guides the Chairman toward presenting perspectives
+rather than synthesizing when W < 0.40. A first-class "council could not reach a
+synthesis" outcome requires the REFINE loop and LCCP fallback chain — both explicitly
+out of scope (see LCCP scope decision). Document as a known v1 limitation.
+
+---
+
+### Streaming architecture — stage-completion events only; no intra-stage token streaming
+
+Token-by-token streaming within a stage requires threading a streaming callback through
+the entire council pipeline interface. The SSE event-per-stage model provides meaningful
+progress feedback without this interface complexity. Intra-stage token streaming is a
+valid post-v1 enhancement.
+
+---
+
+### Storage interface — pluggable Storer from day one; JSON backend is v1 only
+
+The `Storer` interface must be designed to allow replacing the JSON backend without
+rewriting handlers. The JSON file backend is v1 only — `List()` is O(n) on disk and
+does not scale. Interface design must not leak JSON-specific assumptions.
+
+---
+
+### OpenRouter model lifecycle — model IDs in configuration, not code
+
+Council type registry stores model IDs as configuration strings updatable without
+redeployment. The implementation must not hardcode model IDs in source code.
+
+---
+
+### CalculateAggregateRankings — package-level function, not on Runner interface
+
+In archive/v1 this lived on the `Runner` interface, forcing every strategy to satisfy
+it regardless of whether it produces rankings. In v2 it is a package-level function
+(or belongs to a separate ranking/metrics layer).
+
+---
+
+### Infrastructure prerequisites — confirmed requirements for any v2 build
+
+The following are prerequisites, not optional niceties:
 - Config validation at startup (fail fast on missing API key)
 - HTTP client timeout on the OpenRouter client
 - Graceful shutdown for the HTTP server
 - Structured logging (`slog`)
 - Handler tests using mock interfaces
 
-These are not optional niceties — they are prerequisites for a production REST API.
+---
+
+## Remaining open questions
+
+### "Preserve unique insights" is not operationalised
+
+The synthesis repeatedly recommends "explicitly prompt synthesis to preserve unique
+insights." Neither the synthesis nor any source material defines what makes an insight
+"unique" or how to distinguish a fringe claim from a minority-but-correct insight.
+
+**Current position:** The Chairman prompt includes an explicit instruction to surface
+minority perspectives that appear well-reasoned even if not consensus — particularly when
+W < 0.40. Formal operationalization (defining "unique" algorithmically, tracking insight
+provenance) is deferred until an evaluation framework exists to validate any criterion.
+
+**What needs answering before this can be closed:** A concrete rubric or test for
+distinguishing "unique minority insight" from "fringe claim," or an explicit decision
+that this is permanently a prompt-level heuristic.
