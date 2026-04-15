@@ -145,7 +145,10 @@ Response: `text/event-stream` (Server-Sent Events). See [streaming.md](./streami
 
 ## Data Types
 
-> These are JSON object shapes. Property types use pseudocode notation (`string`, `number`, `bool`, `array[]`).
+> **v1 contract** — shapes below describe the archived v1 implementation on `archive/v1`.
+> **v2 changes:** stage result types are anonymisation-first — `StageOneResult` uses `label`/`content` instead of `model`/`response`; `StageTwoResult` uses `reviewer_label`/`rankings` instead of `model`/`ranking`/`parsed_ranking`; `StageThreeResult` adds `duration_ms`; `AssistantMessage` adds `metadata`. The v1 contract is retained here as the reference for the archived code.
+
+> Property types use pseudocode notation (`string`, `number`, `bool`, `array[]`).
 
 ### ConversationMeta
 

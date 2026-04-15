@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,7 +14,7 @@ type NotFoundError struct {
 	ID string
 }
 
-func (e *NotFoundError) Error() string {
+func (e NotFoundError) Error() string {
 	return fmt.Sprintf("conversation not found: %s", e.ID)
 }
 
@@ -51,12 +52,14 @@ type Storer interface {
 // Implementation lives in the L2.2 JSON storage backend issue.
 type Store struct{}
 
-func (s *Store) CreateConversation() (*Conversation, error)                              { panic("not implemented") }
-func (s *Store) GetConversation(id string) (*Conversation, error)                        { panic("not implemented") }
-func (s *Store) ListConversations() ([]ConversationMeta, error)                          { panic("not implemented") }
-func (s *Store) SaveUserMessage(id, content string) error                                { panic("not implemented") }
-func (s *Store) SaveAssistantMessage(id string, msg council.AssistantMessage) error      { panic("not implemented") }
-func (s *Store) SaveTitle(id, title string) error                                        { panic("not implemented") }
+var errNotImplemented = errors.New("not implemented")
+
+func (s *Store) CreateConversation() (*Conversation, error)                         { return nil, errNotImplemented }
+func (s *Store) GetConversation(id string) (*Conversation, error)                   { return nil, errNotImplemented }
+func (s *Store) ListConversations() ([]ConversationMeta, error)                     { return nil, errNotImplemented }
+func (s *Store) SaveUserMessage(id, content string) error                           { return errNotImplemented }
+func (s *Store) SaveAssistantMessage(id string, msg council.AssistantMessage) error { return errNotImplemented }
+func (s *Store) SaveTitle(id, title string) error                                   { return errNotImplemented }
 
 // Compile-time assertion: Store implements Storer.
 var _ Storer = (*Store)(nil)

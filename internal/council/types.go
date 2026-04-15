@@ -1,7 +1,5 @@
 package council
 
-import "time"
-
 // Strategy identifies the deliberation algorithm used by a CouncilType.
 type Strategy int
 
@@ -51,11 +49,11 @@ type EventFunc func(eventType string, data any)
 
 // StageOneResult holds a single council member's generated answer.
 type StageOneResult struct {
-	Label    string    `json:"label"`     // anonymised label, e.g. "Response A"
-	Content  string    `json:"content"`
-	Model    string    `json:"model"`
-	Duration time.Duration `json:"duration_ms"`
-	Error    error     `json:"-"`
+	Label      string `json:"label"`      // anonymised label, e.g. "Response A"
+	Content    string `json:"content"`
+	Model      string `json:"model"`
+	DurationMs int64  `json:"duration_ms"` // elapsed milliseconds
+	Error      error  `json:"-"`
 }
 
 // StageTwoResult holds a single council member's peer-review rankings.
@@ -67,10 +65,10 @@ type StageTwoResult struct {
 
 // StageThreeResult holds the chairman's synthesised final answer.
 type StageThreeResult struct {
-	Content  string        `json:"content"`
-	Model    string        `json:"model"`
-	Duration time.Duration `json:"duration_ms"`
-	Error    error         `json:"-"`
+	Content    string `json:"content"`
+	Model      string `json:"model"`
+	DurationMs int64  `json:"duration_ms"` // elapsed milliseconds
+	Error      error  `json:"-"`
 }
 
 // RankedModel pairs a model name with its aggregate rank score.
