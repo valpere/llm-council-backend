@@ -85,6 +85,14 @@ type Metadata struct {
 	ConsensusW        float64       `json:"consensus_w"`
 }
 
+// Stage2CompleteData is the payload emitted by Runner for the "stage2_complete" event.
+// It bundles peer-review results with the computed aggregate metadata so callers
+// (e.g. the SSE handler) can surface both in one event.
+type Stage2CompleteData struct {
+	Results  []StageTwoResult `json:"results"`
+	Metadata Metadata         `json:"metadata"`
+}
+
 // AssistantMessage is the full deliberation record stored with each assistant turn.
 type AssistantMessage struct {
 	Role     string           `json:"role"`
