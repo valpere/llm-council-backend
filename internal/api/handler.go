@@ -8,9 +8,15 @@ import (
 	"net/http"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/valpere/llm-council/internal/council"
 	"github.com/valpere/llm-council/internal/storage"
+)
+
+const (
+	maxRequestBodyBytes = 1 << 20 // 1 MiB
+	maxTitleRunes       = 50
 )
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -136,9 +142,97 @@ func (h *Handler) getConversation(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, conv)
 }
 
-// sendMessage is a stub; implemented in a later milestone.
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
+	id := r.PathValue("id")
+	if !uuidRE.MatchString(id) {
+		h.writeError(w, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var body struct {
+		Content     string `json:"content"`
+		CouncilType string `json:"council_type"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.storage.SaveUserMessage(id, body.Content); err != nil {
+		var nfe *storage.NotFoundError
+		if errors.As(err, &nfe) {
+			h.writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		h.logger.Error("save user message", "id", id, "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	councilType := body.CouncilType
+	if councilType == "" {
+		councilType = h.defaultCouncilType
+	}
+
+	var (
+		stage1Results []council.StageOneResult
+		stage2Data    council.Stage2CompleteData
+		stage3Result  council.StageThreeResult
+	)
+	onEvent := func(eventType string, data any) {
+		switch eventType {
+		case "stage1_complete":
+			if r, ok := data.([]council.StageOneResult); ok {
+				stage1Results = r
+			}
+		case "stage2_complete":
+			if d, ok := data.(council.Stage2CompleteData); ok {
+				stage2Data = d
+			}
+		case "stage3_complete":
+			if r, ok := data.(council.StageThreeResult); ok {
+				stage3Result = r
+			}
+		}
+	}
+
+	if err := h.runner.RunFull(r.Context(), body.Content, councilType, onEvent); err != nil {
+		var qe *council.QuorumError
+		if errors.As(err, &qe) {
+			h.logger.Warn("council quorum not met", "id", id, "got", qe.Got, "need", qe.Need)
+			h.writeError(w, http.StatusServiceUnavailable, "council quorum not met")
+		} else {
+			h.logger.Error("council run", "id", id, "error", err)
+			h.writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	msg := council.AssistantMessage{
+		Role:     "assistant",
+		Stage1:   stage1Results,
+		Stage2:   stage2Data.Results,
+		Stage3:   stage3Result,
+		Metadata: stage2Data.Metadata,
+	}
+
+	if err := h.storage.SaveAssistantMessage(id, msg); err != nil {
+		h.logger.Error("save assistant message", "id", id, "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	title := msg.Stage3.Content
+	if utf8.RuneCountInString(title) > maxTitleRunes {
+		runes := []rune(title)
+		title = string(runes[:maxTitleRunes])
+	}
+	if err := h.storage.SaveTitle(id, title); err != nil {
+		h.logger.Warn("save title", "id", id, "error", err)
+	}
+
+	h.writeJSON(w, http.StatusOK, msg)
 }
 
 // sseEnvelope is the JSON shape of every SSE data line.

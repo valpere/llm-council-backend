@@ -259,6 +259,213 @@ func TestGetConversation(t *testing.T) {
 	}
 }
 
+// ── SendMessage (blocking) ───────────────────────────────────────────────────
+
+func TestSendMessage(t *testing.T) {
+	successRunner := &mockRunner{
+		runFull: func(_ context.Context, query, ct string, onEvent council.EventFunc) error {
+			onEvent("stage1_complete", []council.StageOneResult{
+				{Label: "Response A", Content: "answer A", Model: "model-a"},
+			})
+			onEvent("stage2_complete", council.Stage2CompleteData{
+				Results: []council.StageTwoResult{
+					{ReviewerLabel: "Response A", Rankings: []string{"Response A"}},
+				},
+				Metadata: council.Metadata{
+					CouncilType:  ct,
+					ConsensusW:   0.9,
+					LabelToModel: map[string]string{"Response A": "model-a"},
+				},
+			})
+			onEvent("stage3_complete", council.StageThreeResult{Content: "synthesized answer", Model: "chairman"})
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name      string
+		id        string
+		body      string
+		storer    *mockStorer
+		runner    *mockRunner
+		wantCode  int
+		checkBody func(t *testing.T, body string)
+	}{
+		{
+			name:     "happy path returns 200 AssistantMessage with metadata",
+			id:       testConvID,
+			body:     `{"content":"why is the sky blue?","council_type":"standard"}`,
+			storer:   okStorer(),
+			runner:   successRunner,
+			wantCode: http.StatusOK,
+			checkBody: func(t *testing.T, body string) {
+				var msg council.AssistantMessage
+				if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &msg); err != nil {
+					t.Fatalf("parse body: %v", err)
+				}
+				if msg.Role != "assistant" {
+					t.Errorf("Role: got %q, want %q", msg.Role, "assistant")
+				}
+				if len(msg.Stage1) != 1 {
+					t.Errorf("Stage1 len: got %d, want 1", len(msg.Stage1))
+				}
+				if msg.Stage3.Content != "synthesized answer" {
+					t.Errorf("Stage3.Content: got %q, want %q", msg.Stage3.Content, "synthesized answer")
+				}
+				if msg.Metadata.ConsensusW != 0.9 {
+					t.Errorf("Metadata.ConsensusW: got %f, want 0.9", msg.Metadata.ConsensusW)
+				}
+				if msg.Metadata.LabelToModel["Response A"] != "model-a" {
+					t.Errorf("Metadata.LabelToModel: got %v", msg.Metadata.LabelToModel)
+				}
+			},
+		},
+		{
+			name:   "council_type defaults to handler default when omitted",
+			id:     testConvID,
+			body:   `{"content":"test query"}`,
+			storer: okStorer(),
+			runner: &mockRunner{
+				runFull: func(_ context.Context, _, ct string, onEvent council.EventFunc) error {
+					if ct != "standard" {
+						t.Errorf("council_type: got %q, want %q", ct, "standard")
+					}
+					onEvent("stage3_complete", council.StageThreeResult{Content: "ok"})
+					return nil
+				},
+			},
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "400 invalid UUID",
+			id:       "not-a-uuid",
+			body:     `{"content":"test"}`,
+			storer:   &mockStorer{},
+			runner:   &mockRunner{},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "400 missing content",
+			id:       testConvID,
+			body:     `{"content":""}`,
+			storer:   &mockStorer{},
+			runner:   &mockRunner{},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "400 malformed JSON body",
+			id:       testConvID,
+			body:     `not json`,
+			storer:   &mockStorer{},
+			runner:   &mockRunner{},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name: "404 conversation not found on save user message",
+			id:   testConvID,
+			body: `{"content":"test"}`,
+			storer: &mockStorer{
+				saveUserMessage: func(id, _ string) error {
+					return &storage.NotFoundError{ID: id}
+				},
+			},
+			runner:   &mockRunner{},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			name: "503 QuorumError from RunFull",
+			id:   testConvID,
+			body: `{"content":"test"}`,
+			storer: okStorer(),
+			runner: &mockRunner{
+				runFull: func(_ context.Context, _, _ string, _ council.EventFunc) error {
+					return &council.QuorumError{Got: 1, Need: 3}
+				},
+			},
+			wantCode: http.StatusServiceUnavailable,
+			checkBody: func(t *testing.T, body string) {
+				var resp map[string]string
+				if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &resp); err != nil {
+					t.Fatalf("parse body: %v", err)
+				}
+				if resp["error"] == "" {
+					t.Errorf("error field missing: %v", resp)
+				}
+			},
+		},
+		{
+			name: "500 generic RunFull error",
+			id:   testConvID,
+			body: `{"content":"test"}`,
+			storer: okStorer(),
+			runner: &mockRunner{
+				runFull: func(_ context.Context, _, _ string, _ council.EventFunc) error {
+					return errors.New("chairman failed")
+				},
+			},
+			wantCode: http.StatusInternalServerError,
+		},
+		{
+			name: "500 on save assistant message failure",
+			id:   testConvID,
+			body: `{"content":"test"}`,
+			storer: &mockStorer{
+				saveUserMessage: func(string, string) error { return nil },
+				saveAssistantMessage: func(string, council.AssistantMessage) error {
+					return errors.New("disk full")
+				},
+				saveTitle: func(string, string) error { return nil },
+			},
+			runner:   successRunner,
+			wantCode: http.StatusInternalServerError,
+		},
+		{
+			name: "title truncated to 50 chars",
+			id:   testConvID,
+			body: `{"content":"test"}`,
+			storer: &mockStorer{
+				saveUserMessage:      func(string, string) error { return nil },
+				saveAssistantMessage: func(string, council.AssistantMessage) error { return nil },
+				saveTitle: func(_ string, title string) error {
+					if len(title) > 50 {
+						t.Errorf("title length: got %d, want ≤50", len(title))
+					}
+					return nil
+				},
+			},
+			runner: &mockRunner{
+				runFull: func(_ context.Context, _, _ string, onEvent council.EventFunc) error {
+					onEvent("stage3_complete", council.StageThreeResult{
+						Content: strings.Repeat("x", 100),
+					})
+					return nil
+				},
+			},
+			wantCode: http.StatusOK,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.storer, tc.runner)
+			req := httptest.NewRequest(
+				http.MethodPost,
+				"/api/conversations/"+tc.id+"/message",
+				bytes.NewBufferString(tc.body),
+			)
+			req.SetPathValue("id", tc.id)
+			w := httptest.NewRecorder()
+			h.sendMessage(w, req)
+			if w.Code != tc.wantCode {
+				t.Errorf("status: got %d, want %d\nbody: %s", w.Code, tc.wantCode, w.Body.String())
+			}
+			if tc.checkBody != nil {
+				tc.checkBody(t, w.Body.String())
+			}
+		})
+	}
+}
+
 // ── SendMessageStream ────────────────────────────────────────────────────────
 
 // okStorer returns a mockStorer that succeeds silently for all write operations.
