@@ -258,6 +258,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 		Content     string `json:"content"`
 		CouncilType string `json:"council_type"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
