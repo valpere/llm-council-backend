@@ -59,14 +59,16 @@ after the error event; no `complete` event follows.
 When Stage 1 returns fewer than M_min successful responses (`QuorumError{Got, Need}`),
 the handler logs `Got`/`Need` at `WARN` level, emits the SSE error event, and returns.
 No `stage2_complete` or `stage3_complete` events are emitted before the error.
-No partial results are persisted.
+No assistant message or stage outputs from the failed run are persisted. The user
+message may already have been saved before SSE began.
 
 ---
 
 ## 3. Partial results (BestSoFar)
 
 **Not returned in v2 Core.** On any pipeline failure the client receives only the SSE
-error event; no stage results from the failed run are persisted.
+error event; no assistant message or stage outputs from the failed run are persisted.
+The user message may already have been saved before SSE began.
 
 BestSoFar tracking (return the best stage-N result reached before the failure) is
 deferred to LCCP Full conformance.
@@ -93,11 +95,13 @@ to include `reason_code` and `recoverable` for programmatic handling:
 | `budget_exhausted` | Controller | Token budget cap exceeded |
 | `schema_violation` | Finalization | Stage 2/3 output violates schema bounds |
 | `controller_error` | Controller | Illegal LCCP state machine transition — always fatal |
-| `evaluation_invalid` | Aggregation | Ranking/aggregation computation failure |
+| `evaluation_invalid` | Evaluation | Stage 2 evaluation output is invalid, incomplete, or unusable |
+| `aggregation_failed` | Aggregation | Ranking/aggregation computation failure |
 | `participant_timeout_exhaustion` | Participant | All per-participant retries consumed |
 
-`reason_code` values match the LCCP failure taxonomy in
-`docs/council-research-synthesis.md §6`.
+`reason_code` values are derived from the failure schema in
+`docs/council-research-synthesis.md §4` (`failure.reason_code` enumeration);
+the Category column maps to the taxonomy in §6.
 
 ---
 
