@@ -22,11 +22,14 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, cons
     <div className="stage stage2">
       <h3 className="stage-title">Stage 2: Peer Rankings</h3>
 
-      {consensusW != null && consensusW > 0 && (
-        <div className={`consensus-badge consensus-${consensusLabel(consensusW)}`}>
-          Consensus: {consensusW.toFixed(2)} ({consensusLabel(consensusW)})
-        </div>
-      )}
+      {consensusW != null && consensusW > 0 && (() => {
+        const label = consensusLabel(consensusW);
+        return (
+          <div className={`consensus-badge consensus-${label}`}>
+            Consensus: {consensusW.toFixed(2)} ({label})
+          </div>
+        );
+      })()}
 
       <h4>Individual Rankings</h4>
       <p className="stage-description">
