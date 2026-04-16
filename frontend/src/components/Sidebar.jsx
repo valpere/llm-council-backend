@@ -1,41 +1,69 @@
 import './Sidebar.css';
 
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export default function Sidebar({
   conversations,
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  isOpen,
+  onToggle,
+  theme,
+  onToggleTheme,
 }) {
   return (
-    <div className="sidebar">
+    <div className={`sidebar${isOpen ? '' : ' collapsed'}`}>
       <div className="sidebar-header">
-        <h1>LLM Council</h1>
-        <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
+        <span className="sidebar-title">LLM Council</span>
+        <button
+          className="sidebar-toggle"
+          onClick={onToggle}
+          aria-label={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {isOpen ? '‹' : '›'}
         </button>
       </div>
 
-      <div className="conversation-list">
-        {conversations.length === 0 ? (
-          <div className="no-conversations">No conversations yet</div>
-        ) : (
-          conversations.map((conv) => (
-            <div
-              key={conv.id}
-              className={`conversation-item ${
-                conv.id === currentConversationId ? 'active' : ''
-              }`}
-              onClick={() => onSelectConversation(conv.id)}
-            >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
-              </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
-              </div>
-            </div>
-          ))
-        )}
+      <div className="sidebar-body">
+        <button className="new-conversation-btn" onClick={onNewConversation}>
+          + New Conversation
+        </button>
+
+        <div className="conversation-list">
+          {conversations.length === 0 ? (
+            <div className="no-conversations">No conversations yet</div>
+          ) : (
+            conversations.map((conv) => (
+              <button
+                key={conv.id}
+                className={`conversation-item${conv.id === currentConversationId ? ' active' : ''}`}
+                onClick={() => onSelectConversation(conv.id)}
+              >
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {formatDate(conv.created_at)}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="sidebar-footer">
+        <button
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          {theme === 'dark' ? '☀' : '☾'}
+        </button>
       </div>
     </div>
   );
