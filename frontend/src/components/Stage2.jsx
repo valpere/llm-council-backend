@@ -1,17 +1,8 @@
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import './Stage2.css';
 
-function deAnonymizeText(text, labelToModel) {
-  if (!labelToModel) return text;
-
-  let result = text;
-  // Replace each "Response X" with the actual model name
-  Object.entries(labelToModel).forEach(([label, model]) => {
-    const modelShortName = model.split('/')[1] || model;
-    result = result.replace(new RegExp(label, 'g'), `**${modelShortName}**`);
-  });
-  return result;
+function modelShortName(model) {
+  return model.split('/')[1] || model;
 }
 
 export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
@@ -25,54 +16,50 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
     <div className="stage stage2">
       <h3 className="stage-title">Stage 2: Peer Rankings</h3>
 
-      <h4>Raw Evaluations</h4>
+      <h4>Individual Rankings</h4>
       <p className="stage-description">
-        Each model evaluated all responses (anonymized as Response A, B, C, etc.) and provided rankings.
-        Below, model names are shown in <strong>bold</strong> for readability, but the original evaluation used anonymous labels.
+        Each model ranked all responses (anonymized as Response A, B, C, etc.).
+        Model names shown below are resolved via the label map.
       </p>
 
       <div className="tabs">
-        {rankings.map((rank, index) => (
-          <button
-            key={index}
-            className={`tab ${activeTab === index ? 'active' : ''}`}
-            onClick={() => setActiveTab(index)}
-          >
-            {rank.model.split('/')[1] || rank.model}
-          </button>
-        ))}
+        {rankings.map((rank, index) => {
+          const reviewerModel = labelToModel?.[rank.reviewer_label] ?? rank.reviewer_label;
+          return (
+            <button
+              key={index}
+              className={`tab ${activeTab === index ? 'active' : ''}`}
+              onClick={() => setActiveTab(index)}
+            >
+              {modelShortName(reviewerModel)}
+            </button>
+          );
+        })}
       </div>
 
       <div className="tab-content">
         <div className="ranking-model">
-          {rankings[activeTab].model}
+          {labelToModel?.[rankings[activeTab].reviewer_label] ?? rankings[activeTab].reviewer_label}
         </div>
-        <div className="ranking-content markdown-content">
-          <ReactMarkdown>
-            {deAnonymizeText(rankings[activeTab].ranking, labelToModel)}
-          </ReactMarkdown>
-        </div>
-
-        {rankings[activeTab].parsed_ranking &&
-         rankings[activeTab].parsed_ranking.length > 0 && (
+        {rankings[activeTab].rankings && rankings[activeTab].rankings.length > 0 ? (
           <div className="parsed-ranking">
-            <strong>Extracted Ranking:</strong>
+            <strong>Ranking (best to worst):</strong>
             <ol>
-              {rankings[activeTab].parsed_ranking.map((label, i) => (
+              {rankings[activeTab].rankings.map((label, i) => (
                 <li key={i}>
-                  {labelToModel && labelToModel[label]
-                    ? labelToModel[label].split('/')[1] || labelToModel[label]
-                    : label}
+                  {labelToModel?.[label] ? modelShortName(labelToModel[label]) : label}
                 </li>
               ))}
             </ol>
           </div>
+        ) : (
+          <p className="ranking-missing">No rankings submitted by this reviewer.</p>
         )}
       </div>
 
       {aggregateRankings && aggregateRankings.length > 0 && (
         <div className="aggregate-rankings">
-          <h4>Aggregate Rankings (Street Cred)</h4>
+          <h4>Aggregate Rankings</h4>
           <p className="stage-description">
             Combined results across all peer evaluations (lower score is better):
           </p>
@@ -80,15 +67,8 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
             {aggregateRankings.map((agg, index) => (
               <div key={index} className="aggregate-item">
                 <span className="rank-position">#{index + 1}</span>
-                <span className="rank-model">
-                  {agg.model.split('/')[1] || agg.model}
-                </span>
-                <span className="rank-score">
-                  Avg: {agg.average_rank.toFixed(2)}
-                </span>
-                <span className="rank-count">
-                  ({agg.rankings_count} votes)
-                </span>
+                <span className="rank-model">{modelShortName(agg.model)}</span>
+                <span className="rank-score">Score: {agg.score.toFixed(2)}</span>
               </div>
             ))}
           </div>

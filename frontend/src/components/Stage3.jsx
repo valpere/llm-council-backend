@@ -20,7 +20,7 @@ export default function Stage3({ finalResponse, error }) {
             Chairman: {finalResponse.model.split('/')[1] || finalResponse.model}
           </div>
           <div className="final-text markdown-content">
-            <ReactMarkdown>{finalResponse.response}</ReactMarkdown>
+            <ReactMarkdown>{finalResponse.content}</ReactMarkdown>
           </div>
         </div>
       )}

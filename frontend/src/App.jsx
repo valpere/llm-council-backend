@@ -117,7 +117,12 @@ function App() {
         title_complete: () => loadConversations(),
         complete: () => { loadConversations(); setIsLoading(false); },
         error: (event) => {
-          updateLast((msg) => { msg.error = event.message; msg.loading.stage3 = false; });
+          updateLast((msg) => {
+            msg.error = event.message;
+            msg.loading.stage1 = false;
+            msg.loading.stage2 = false;
+            msg.loading.stage3 = false;
+          });
           setIsLoading(false);
         },
       };
