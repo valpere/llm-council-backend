@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -141,4 +142,26 @@ func (c *Council) runStage2(ctx context.Context, query string, stage1 []StageOne
 	}
 	wg.Wait()
 	return results
+}
+
+// runStage3 calls the Chairman model to synthesize a final answer from the
+// Stage 2 peer-review rankings. Sequential — single LLM call, no concurrency.
+func (c *Council) runStage3(ctx context.Context, query string, stage2 []StageTwoResult, labelToModel map[string]string, consensusW float64, chairmanModel string) (StageThreeResult, error) {
+	start := time.Now()
+	resp, err := c.client.Complete(ctx, CompletionRequest{
+		Model:    chairmanModel,
+		Messages: BuildStage3Prompt(query, stage2, labelToModel, consensusW),
+	})
+	elapsed := time.Since(start).Milliseconds()
+	if err != nil {
+		return StageThreeResult{Model: chairmanModel, DurationMs: elapsed}, fmt.Errorf("stage3: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return StageThreeResult{Model: chairmanModel, DurationMs: elapsed}, fmt.Errorf("stage3: %w", errNoChoices)
+	}
+	return StageThreeResult{
+		Content:    resp.Choices[0].Message.Content,
+		Model:      chairmanModel,
+		DurationMs: elapsed,
+	}, nil
 }
