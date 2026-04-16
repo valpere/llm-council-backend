@@ -7,7 +7,7 @@ const SUGGESTED_PROMPTS = [
   'Compare merge sort and quicksort',
 ];
 
-export default function EmptyState({ onSendMessage }) {
+export default function EmptyState({ onSendMessage, isLoading }) {
   return (
     <div className="empty-state-container">
       <div className="empty-state-hero">
@@ -23,6 +23,7 @@ export default function EmptyState({ onSendMessage }) {
             key={prompt}
             className="prompt-chip"
             onClick={() => onSendMessage(prompt)}
+            disabled={isLoading}
           >
             {prompt}
           </button>

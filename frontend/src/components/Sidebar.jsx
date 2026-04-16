@@ -20,7 +20,11 @@ export default function Sidebar({
     <div className={`sidebar${isOpen ? '' : ' collapsed'}`}>
       <div className="sidebar-header">
         <span className="sidebar-title">LLM Council</span>
-        <button className="sidebar-toggle" onClick={onToggle} title="Toggle sidebar">
+        <button
+          className="sidebar-toggle"
+          onClick={onToggle}
+          aria-label={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
           {isOpen ? '‹' : '›'}
         </button>
       </div>
@@ -35,7 +39,7 @@ export default function Sidebar({
             <div className="no-conversations">No conversations yet</div>
           ) : (
             conversations.map((conv) => (
-              <div
+              <button
                 key={conv.id}
                 className={`conversation-item${conv.id === currentConversationId ? ' active' : ''}`}
                 onClick={() => onSelectConversation(conv.id)}
@@ -46,14 +50,18 @@ export default function Sidebar({
                 <div className="conversation-meta">
                   {formatDate(conv.created_at)}
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
       </div>
 
       <div className="sidebar-footer">
-        <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+        <button
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
       </div>

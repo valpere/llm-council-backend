@@ -56,7 +56,7 @@ export default function ChatInterface({
       <div className="chat-interface">
         <div className="chat-header">
           {!sidebarOpen && (
-            <button className="sidebar-open-btn" onClick={onToggleSidebar} title="Open sidebar">
+            <button className="sidebar-open-btn" onClick={onToggleSidebar} aria-label="Open sidebar">
               ☰
             </button>
           )}
@@ -72,7 +72,7 @@ export default function ChatInterface({
     <div className="chat-interface">
       <div className="chat-header">
         {!sidebarOpen && (
-          <button className="sidebar-open-btn" onClick={onToggleSidebar} title="Open sidebar">
+          <button className="sidebar-open-btn" onClick={onToggleSidebar} aria-label="Open sidebar">
             ☰
           </button>
         )}
@@ -83,7 +83,7 @@ export default function ChatInterface({
 
       <div className="messages-container">
         {conversation.messages.length === 0 ? (
-          <EmptyState onSendMessage={onSendMessage} />
+          <EmptyState onSendMessage={onSendMessage} isLoading={isLoading} />
         ) : (
           conversation.messages.map((msg, index) => (
             <div key={index} className="message-group">
@@ -141,7 +141,6 @@ export default function ChatInterface({
           className="message-input"
           placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           disabled={isLoading}

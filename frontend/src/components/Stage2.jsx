@@ -32,7 +32,7 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, cons
         <span className="stage-accordion-label">
           {isLoading ? (
             <>
-              <span className="spinner spinner-sm" />
+              <span className="spinner-sm" />
               Running peer rankings…
             </>
           ) : (

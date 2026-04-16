@@ -10,7 +10,7 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? 'dark');
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

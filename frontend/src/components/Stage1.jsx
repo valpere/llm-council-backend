@@ -22,7 +22,7 @@ export default function Stage1({ responses, isLoading }) {
         <span className="stage-accordion-label">
           {isLoading ? (
             <>
-              <span className="spinner spinner-sm" />
+              <span className="spinner-sm" />
               Collecting individual responses…
             </>
           ) : (

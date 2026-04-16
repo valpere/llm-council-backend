@@ -107,6 +107,10 @@
 }
 
 .conversation-item {
+  width: 100%;
+  background: none;
+  text-align: left;
+  font: inherit;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
