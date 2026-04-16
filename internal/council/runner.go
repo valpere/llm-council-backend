@@ -145,12 +145,13 @@ func (c *Council) runStage2(ctx context.Context, query string, stage1 []StageOne
 }
 
 // runStage3 calls the Chairman model to synthesize a final answer from the
-// Stage 2 peer-review rankings. Sequential — single LLM call, no concurrency.
-func (c *Council) runStage3(ctx context.Context, query string, stage2 []StageTwoResult, labelToModel map[string]string, consensusW float64, chairmanModel string) (StageThreeResult, error) {
+// Stage 1 responses and Stage 2 peer-review rankings. Sequential — single LLM call.
+func (c *Council) runStage3(ctx context.Context, query string, stage2 []StageTwoResult, labelToModel map[string]string, consensusW float64, chairmanModel string, temperature float64, labeledResponses map[string]string) (StageThreeResult, error) {
 	start := time.Now()
 	resp, err := c.client.Complete(ctx, CompletionRequest{
-		Model:    chairmanModel,
-		Messages: BuildStage3Prompt(query, stage2, labelToModel, consensusW),
+		Model:       chairmanModel,
+		Messages:    BuildStage3Prompt(query, stage2, labelToModel, consensusW, labeledResponses),
+		Temperature: temperature,
 	})
 	elapsed := time.Since(start).Milliseconds()
 	if err != nil {

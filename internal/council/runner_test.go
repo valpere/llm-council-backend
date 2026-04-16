@@ -3,6 +3,7 @@ package council
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -272,7 +273,8 @@ func TestRunStage3_Success(t *testing.T) {
 	result, err := c.runStage3(context.Background(), "q",
 		[]StageTwoResult{{ReviewerLabel: "Response A", Rankings: []string{"Response A", "Response B"}}},
 		map[string]string{"Response A": "model-a", "Response B": "model-b"},
-		0.75, "chairman-model",
+		0.75, "chairman-model", 0.3,
+		map[string]string{"Response A": "answer A", "Response B": "answer B"},
 	)
 
 	if err != nil {
@@ -297,7 +299,7 @@ func TestRunStage3_ClientError_WrappedAndModelPreserved(t *testing.T) {
 		},
 	}
 	c := NewCouncil(client, nil, nil)
-	result, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model")
+	result, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model", 0.3, nil)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -317,7 +319,7 @@ func TestRunStage3_EmptyChoices_WrappedError(t *testing.T) {
 		},
 	}
 	c := NewCouncil(client, nil, nil)
-	_, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model")
+	_, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model", 0.3, nil)
 
 	if err == nil {
 		t.Fatal("expected error for empty choices, got nil")
@@ -336,10 +338,34 @@ func TestRunStage3_UsesChairmanModel(t *testing.T) {
 		},
 	}
 	c := NewCouncil(client, nil, nil)
-	c.runStage3(context.Background(), "q", nil, nil, 0.5, "my-chairman") //nolint:errcheck
+	c.runStage3(context.Background(), "q", nil, nil, 0.5, "my-chairman", 0.3, nil) //nolint:errcheck
 
 	if gotModel != "my-chairman" {
 		t.Errorf("Model: got %q, want %q", gotModel, "my-chairman")
+	}
+}
+
+func TestRunStage3_Stage1ContentAndTemperatureForwarded(t *testing.T) {
+	var gotReq CompletionRequest
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			gotReq = req
+			return makeResponse("ok"), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman", 0.3, //nolint:errcheck
+		map[string]string{"Response A": "the actual answer"},
+	)
+
+	if gotReq.Temperature != 0.3 {
+		t.Errorf("Temperature: got %v, want 0.3", gotReq.Temperature)
+	}
+	if len(gotReq.Messages) == 0 {
+		t.Fatal("Messages: empty")
+	}
+	if !strings.Contains(gotReq.Messages[0].Content, "the actual answer") {
+		t.Error("stage1 content missing from chairman prompt")
 	}
 }
 
