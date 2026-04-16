@@ -23,14 +23,16 @@ func main() {
 	// .env file work normally.
 	_ = godotenv.Load()
 
-	cfg, err := config.Load()
-	if err != nil {
-		slog.Error("configuration error", "error", err)
-		os.Exit(1)
-	}
-
+	// Initialise the JSON logger first so every subsequent slog call —
+	// including those inside config.Load() — uses a consistent format.
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("configuration error", "error", err)
+		os.Exit(1)
+	}
 
 	// Build the council type registry from config fields.
 	registry := map[string]council.CouncilType{
@@ -67,16 +69,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// errCh receives the first non-ErrServerClosed error from ListenAndServe,
+	// allowing the main goroutine to log and exit without skipping deferred cleanup.
+	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("server starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("server error", "error", err)
-			os.Exit(1)
+			errCh <- err
 		}
 	}()
 
-	<-ctx.Done()
-	logger.Info("shutting down")
+	select {
+	case <-ctx.Done():
+		logger.Info("shutting down")
+	case err := <-errCh:
+		logger.Error("server error", "error", err)
+		os.Exit(1)
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

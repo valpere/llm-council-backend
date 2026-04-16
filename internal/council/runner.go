@@ -2,8 +2,11 @@ package council
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
+
+var errNotImplemented = errors.New("council: RunFull not yet implemented")
 
 // Council orchestrates the full multi-stage deliberation pipeline.
 // Full implementation is provided in a later milestone.
@@ -27,7 +30,7 @@ func NewCouncil(client LLMClient, registry map[string]CouncilType, logger *slog.
 var _ Runner = (*Council)(nil)
 
 // RunFull orchestrates a full council deliberation.
-// Stub — full implementation is provided in a later milestone.
+// Stub — returns errNotImplemented until #86 is implemented.
 func (c *Council) RunFull(_ context.Context, _ string, _ string, _ EventFunc) error {
-	return nil
+	return errNotImplemented
 }
