@@ -125,3 +125,125 @@ func TestRunStage1_EmptyChoices_IsError(t *testing.T) {
 		t.Errorf("Content: want empty on error, got %q", results[0].Content)
 	}
 }
+
+// ── runStage2 ─────────────────────────────────────────────────────────────────
+
+// stage1Fixture returns labeled stage1 results for use in stage2 tests.
+func stage1Fixture() []StageOneResult {
+	return []StageOneResult{
+		{Label: "Response A", Model: "model-a", Content: "answer A"},
+		{Label: "Response B", Model: "model-b", Content: "answer B"},
+		{Label: "Response C", Model: "model-c", Content: "answer C"},
+	}
+}
+
+func TestRunStage2_AllSucceed(t *testing.T) {
+	stage1 := stage1Fixture()
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			// Each reviewer ranks A > B > C regardless of who they are.
+			return makeResponse(`{"rankings":["Response A","Response B","Response C"]}`), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	results := c.runStage2(context.Background(), "q", stage1, 0.7)
+
+	if len(results) != 3 {
+		t.Fatalf("len: got %d, want 3", len(results))
+	}
+	for i, r := range results {
+		if r.Error != nil {
+			t.Errorf("results[%d].Error: unexpected %v", i, r.Error)
+		}
+		if len(r.Rankings) != 3 {
+			t.Errorf("results[%d].Rankings len: got %d, want 3", i, len(r.Rankings))
+		}
+		if r.ReviewerLabel != stage1[i].Label {
+			t.Errorf("results[%d].ReviewerLabel: got %q, want %q", i, r.ReviewerLabel, stage1[i].Label)
+		}
+	}
+}
+
+func TestRunStage2_ParseFailure_NilRankings_NoError(t *testing.T) {
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return makeResponse("not valid json"), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	results := c.runStage2(context.Background(), "q", stage1Fixture(), 0.7)
+
+	for i, r := range results {
+		if r.Error != nil {
+			t.Errorf("results[%d].Error: want nil on parse failure, got %v", i, r.Error)
+		}
+		if r.Rankings != nil {
+			t.Errorf("results[%d].Rankings: want nil on parse failure, got %v", i, r.Rankings)
+		}
+	}
+}
+
+func TestRunStage2_UnknownLabelsDropped(t *testing.T) {
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return makeResponse(`{"rankings":["Response A","Response Z","Response B"]}`), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	results := c.runStage2(context.Background(), "q", stage1Fixture(), 0.7)
+
+	for i, r := range results {
+		for _, label := range r.Rankings {
+			if label == "Response Z" {
+				t.Errorf("results[%d].Rankings: unknown label %q not dropped", i, label)
+			}
+		}
+		// "Response A" and "Response B" should remain
+		if len(r.Rankings) != 2 {
+			t.Errorf("results[%d].Rankings len: got %d, want 2", i, len(r.Rankings))
+		}
+	}
+}
+
+func TestRunStage2_LLMFailure_SetsError(t *testing.T) {
+	errBoom := errors.New("api error")
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			if req.Model == "model-b" {
+				return CompletionResponse{}, errBoom
+			}
+			return makeResponse(`{"rankings":["Response A","Response B","Response C"]}`), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	results := c.runStage2(context.Background(), "q", stage1Fixture(), 0.7)
+
+	if results[0].Error != nil {
+		t.Errorf("results[0].Error: unexpected %v", results[0].Error)
+	}
+	if !errors.Is(results[1].Error, errBoom) {
+		t.Errorf("results[1].Error: got %v, want errBoom", results[1].Error)
+	}
+	if results[2].Error != nil {
+		t.Errorf("results[2].Error: unexpected %v", results[2].Error)
+	}
+}
+
+func TestRunStage2_JsonObjectFormatRequested(t *testing.T) {
+	var gotFormat *ResponseFormat
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			gotFormat = req.ResponseFormat
+			return makeResponse(`{"rankings":["Response A"]}`), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	c.runStage2(context.Background(), "q", stage1Fixture()[:1], 0.7)
+
+	if gotFormat == nil {
+		t.Fatal("ResponseFormat: want non-nil, got nil")
+	}
+	if gotFormat.Type != "json_object" {
+		t.Errorf("ResponseFormat.Type: got %q, want %q", gotFormat.Type, "json_object")
+	}
+}

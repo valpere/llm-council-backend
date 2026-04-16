@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
@@ -67,6 +68,68 @@ func (c *Council) runStage1(ctx context.Context, query string, models []string, 
 				results[i].Content = resp.Choices[0].Message.Content
 			}
 		}(i, model)
+	}
+	wg.Wait()
+	return results
+}
+
+// runStage2 sends peer-review requests to all stage1 models concurrently.
+// Each reviewer receives the full set of anonymised stage1 responses and returns
+// a ranked ordering as JSON. Parse failures are logged and treated as missing
+// rankings so midrank imputation in CalculateAggregateRankings handles them.
+// Unknown labels are logged and dropped from the ranking.
+// LLM call failures are stored in StageTwoResult.Error; parse failures are not.
+func (c *Council) runStage2(ctx context.Context, query string, stage1 []StageOneResult, temperature float64) []StageTwoResult {
+	// Build the prompt input once — same for every reviewer.
+	labeledResponses := make(map[string]string, len(stage1))
+	knownLabels := make(map[string]bool, len(stage1))
+	for _, r := range stage1 {
+		labeledResponses[r.Label] = r.Content
+		knownLabels[r.Label] = true
+	}
+
+	results := make([]StageTwoResult, len(stage1))
+	var wg sync.WaitGroup
+	for i, s1 := range stage1 {
+		wg.Add(1)
+		go func(i int, s1 StageOneResult) {
+			defer wg.Done()
+			resp, err := c.client.Complete(ctx, CompletionRequest{
+				Model:          s1.Model,
+				Messages:       BuildStage2Prompt(query, labeledResponses),
+				Temperature:    temperature,
+				ResponseFormat: &ResponseFormat{Type: "json_object"},
+			})
+			if err != nil {
+				results[i] = StageTwoResult{ReviewerLabel: s1.Label, Error: err}
+				return
+			}
+			if len(resp.Choices) == 0 {
+				results[i] = StageTwoResult{ReviewerLabel: s1.Label, Error: errNoChoices}
+				return
+			}
+
+			var parsed struct {
+				Rankings []string `json:"rankings"`
+			}
+			if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &parsed); err != nil {
+				if c.logger != nil {
+					c.logger.Warn("stage2: parse failure", slog.String("reviewer", s1.Label), slog.Any("error", err))
+				}
+				results[i] = StageTwoResult{ReviewerLabel: s1.Label}
+				return
+			}
+
+			valid := make([]string, 0, len(parsed.Rankings))
+			for _, label := range parsed.Rankings {
+				if knownLabels[label] {
+					valid = append(valid, label)
+				} else if c.logger != nil {
+					c.logger.Warn("stage2: unknown label dropped", slog.String("reviewer", s1.Label), slog.String("label", label))
+				}
+			}
+			results[i] = StageTwoResult{ReviewerLabel: s1.Label, Rankings: valid}
+		}(i, s1)
 	}
 	wg.Wait()
 	return results
