@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -403,18 +404,38 @@ func councilFixture() map[string]CouncilType {
 	}
 }
 
+// labelsFromPrompt extracts "Response X" labels from a stage-2 prompt by looking
+// for "## Response " heading lines (format produced by BuildStage2Prompt).
+func labelsFromPrompt(content string) []string {
+	var labels []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "## Response ") {
+			labels = append(labels, strings.TrimPrefix(line, "## "))
+		}
+	}
+	return labels
+}
+
 // fullPipelineClient returns a mock client that succeeds for all calls:
-// stage1 returns prose, stage2 returns valid rankings JSON, stage3 returns synthesis.
+// stage1 returns prose, stage2 extracts labels from the prompt and returns them
+// as rankings (so CalculateAggregateRankings produces non-nil output), stage3
+// returns a synthesis string.
 func fullPipelineClient(t *testing.T) *mockLLMClient {
 	t.Helper()
 	return &mockLLMClient{
 		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
 			if req.ResponseFormat != nil && req.ResponseFormat.Type == "json_object" {
-				// Stage 2 reviewer — return valid rankings (labels not known at test time,
-				// so return an empty array; midrank imputation handles it).
-				return makeResponse(`{"rankings":[]}`), nil
+				// Stage 2 reviewer — derive labels from the prompt so rankings are valid.
+				var labels []string
+				if len(req.Messages) > 0 {
+					labels = labelsFromPrompt(req.Messages[0].Content)
+				}
+				type rankResp struct {
+					Rankings []string `json:"rankings"`
+				}
+				b, _ := json.Marshal(rankResp{Rankings: labels})
+				return makeResponse(string(b)), nil
 			}
-			// Stage 1 or Stage 3
 			return makeResponse("answer from " + req.Model), nil
 		},
 	}
@@ -508,5 +529,18 @@ func TestRunFull_Stage2CompletePayload_IsStage2CompleteData(t *testing.T) {
 	}
 	if len(d.Metadata.LabelToModel) == 0 {
 		t.Error("Metadata.LabelToModel: empty")
+	}
+	// AggregateRankings must be non-empty and contain real model names, not labels.
+	if len(d.Metadata.AggregateRankings) == 0 {
+		t.Error("Metadata.AggregateRankings: empty")
+	}
+	expectedModels := map[string]bool{"model-a": true, "model-b": true, "model-c": true}
+	for _, r := range d.Metadata.AggregateRankings {
+		if strings.HasPrefix(r.Model, "Response ") {
+			t.Errorf("AggregateRankings entry %q contains a label instead of a model name", r.Model)
+		}
+		if !expectedModels[r.Model] {
+			t.Errorf("AggregateRankings entry %q is not a known model", r.Model)
+		}
 	}
 }

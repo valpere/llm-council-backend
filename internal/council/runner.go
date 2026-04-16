@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
@@ -71,16 +72,27 @@ func (c *Council) RunFull(ctx context.Context, query string, councilTypeName str
 	stage2Results := c.runStage2(ctx, query, successful, ct.Temperature)
 
 	// Compute aggregate rankings and Kendall's W consensus coefficient.
+	// Sort labels for deterministic ranking output across runs.
 	allLabels := make([]string, 0, len(labelToModel))
 	for label := range labelToModel {
 		allLabels = append(allLabels, label)
 	}
+	sort.Strings(allLabels)
 	aggregateRankings, consensusW := CalculateAggregateRankings(stage2Results, allLabels)
+
+	// Translate label-keyed RankedModel entries to real model names for persistence/API.
+	rankedByModel := make([]RankedModel, len(aggregateRankings))
+	for i, r := range aggregateRankings {
+		if model, ok := labelToModel[r.Model]; ok {
+			r.Model = model
+		}
+		rankedByModel[i] = r
+	}
 
 	metadata := Metadata{
 		CouncilType:       councilTypeName,
 		LabelToModel:      labelToModel,
-		AggregateRankings: aggregateRankings,
+		AggregateRankings: rankedByModel,
 		ConsensusW:        consensusW,
 	}
 
