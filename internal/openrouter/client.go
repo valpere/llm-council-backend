@@ -12,7 +12,10 @@ import (
 	"github.com/valpere/llm-council/internal/council"
 )
 
-const completionsURL = "https://openrouter.ai/api/v1/chat/completions"
+const (
+	defaultURL   = "https://openrouter.ai/api/v1/chat/completions"
+	maxBodyBytes = 4 * 1024 * 1024 // 4 MiB cap on response bodies
+)
 
 // APIError is returned when OpenRouter responds with a non-200 status code.
 type APIError struct {
@@ -26,15 +29,17 @@ func (e *APIError) Error() string {
 
 // Client sends completion requests to the OpenRouter API.
 type Client struct {
-	apiKey string
-	http   *http.Client
+	apiKey  string
+	baseURL string // overridable in tests; defaults to defaultURL
+	http    *http.Client
 }
 
 // NewClient creates a Client with the given API key and HTTP timeout.
 func NewClient(apiKey string, timeout time.Duration) *Client {
 	return &Client{
-		apiKey: apiKey,
-		http:   &http.Client{Timeout: timeout},
+		apiKey:  apiKey,
+		baseURL: defaultURL,
+		http:    &http.Client{Timeout: timeout},
 	}
 }
 
@@ -49,7 +54,7 @@ func (c *Client) Complete(ctx context.Context, req council.CompletionRequest) (c
 		return council.CompletionResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, completionsURL, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
 	if err != nil {
 		return council.CompletionResponse{}, fmt.Errorf("create request: %w", err)
 	}
@@ -64,7 +69,8 @@ func (c *Client) Complete(ctx context.Context, req council.CompletionRequest) (c
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Limit reads to maxBodyBytes to guard against unexpectedly large responses.
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
 		return council.CompletionResponse{}, fmt.Errorf("read response: %w", err)
 	}
