@@ -8,9 +8,15 @@ import (
 	"net/http"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/valpere/llm-council/internal/council"
 	"github.com/valpere/llm-council/internal/storage"
+)
+
+const (
+	maxRequestBodyBytes = 1 << 20 // 1 MiB
+	maxTitleRunes       = 50
 )
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -147,6 +153,7 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		Content     string `json:"content"`
 		CouncilType string `json:"council_type"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -217,8 +224,9 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	title := msg.Stage3.Content
-	if len(title) > 50 {
-		title = title[:50]
+	if utf8.RuneCountInString(title) > maxTitleRunes {
+		runes := []rune(title)
+		title = string(runes[:maxTitleRunes])
 	}
 	if err := h.storage.SaveTitle(id, title); err != nil {
 		h.logger.Warn("save title", "id", id, "error", err)
