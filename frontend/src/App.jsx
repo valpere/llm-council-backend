@@ -22,7 +22,15 @@ function App() {
   const loadConversation = async (id) => {
     try {
       const conv = await api.getConversation(id);
-      setCurrentConversation(conv);
+      const messages = (conv.messages ?? []).map((msg) => {
+        if (msg.role !== 'assistant') return msg;
+        return {
+          loading: { stage1: false, stage2: false, stage3: false },
+          error: null,
+          ...msg,
+        };
+      });
+      setCurrentConversation({ ...conv, messages });
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
