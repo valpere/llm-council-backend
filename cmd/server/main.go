@@ -45,7 +45,7 @@ func main() {
 		},
 	}
 
-	client := openrouter.NewClient(cfg.OpenRouterAPIKey)
+	client := openrouter.NewClient(cfg.OpenRouterAPIKey, 120*time.Second)
 	runner := council.NewCouncil(client, registry, logger)
 
 	store, err := storage.NewStore(cfg.DataDir, logger)
