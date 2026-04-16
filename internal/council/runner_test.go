@@ -2,6 +2,7 @@ package council
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -385,5 +386,161 @@ func TestRunStage2_JsonObjectFormatRequested(t *testing.T) {
 	}
 	if gotFormat.Type != "json_object" {
 		t.Errorf("ResponseFormat.Type: got %q, want %q", gotFormat.Type, "json_object")
+	}
+}
+
+// ── RunFull ───────────────────────────────────────────────────────────────────
+
+// councilFixture returns a registry with one council type containing 3 models.
+func councilFixture() map[string]CouncilType {
+	return map[string]CouncilType{
+		"default": {
+			Name:          "default",
+			Strategy:      PeerReview,
+			Models:        []string{"model-a", "model-b", "model-c"},
+			ChairmanModel: "chairman",
+			Temperature:   0.7,
+		},
+	}
+}
+
+// labelsFromPrompt extracts "Response X" labels from a stage-2 prompt by looking
+// for "## Response " heading lines (format produced by BuildStage2Prompt).
+func labelsFromPrompt(content string) []string {
+	var labels []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "## Response ") {
+			labels = append(labels, strings.TrimPrefix(line, "## "))
+		}
+	}
+	return labels
+}
+
+// fullPipelineClient returns a mock client that succeeds for all calls:
+// stage1 returns prose, stage2 extracts labels from the prompt and returns them
+// as rankings (so CalculateAggregateRankings produces non-nil output), stage3
+// returns a synthesis string.
+func fullPipelineClient(t *testing.T) *mockLLMClient {
+	t.Helper()
+	return &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			if req.ResponseFormat != nil && req.ResponseFormat.Type == "json_object" {
+				// Stage 2 reviewer — derive labels from the prompt so rankings are valid.
+				var labels []string
+				if len(req.Messages) > 0 {
+					labels = labelsFromPrompt(req.Messages[0].Content)
+				}
+				type rankResp struct {
+					Rankings []string `json:"rankings"`
+				}
+				b, _ := json.Marshal(rankResp{Rankings: labels})
+				return makeResponse(string(b)), nil
+			}
+			return makeResponse("answer from " + req.Model), nil
+		},
+	}
+}
+
+func TestRunFull_UnknownCouncilType_ReturnsError(t *testing.T) {
+	c := NewCouncil(&mockLLMClient{}, councilFixture(), nil)
+	err := c.RunFull(context.Background(), "q", "unknown-type", nil)
+	if err == nil {
+		t.Fatal("expected error for unknown council type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown council type") {
+		t.Errorf("error message: got %q, want 'unknown council type'", err.Error())
+	}
+}
+
+func TestRunFull_QuorumFailure_ReturnsQuorumError(t *testing.T) {
+	// All 3 models fail → quorum not met.
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return CompletionResponse{}, errors.New("model unavailable")
+		},
+	}
+	c := NewCouncil(client, councilFixture(), nil)
+	err := c.RunFull(context.Background(), "q", "default", nil)
+
+	var qe *QuorumError
+	if !errors.As(err, &qe) {
+		t.Fatalf("expected *QuorumError, got %T: %v", err, err)
+	}
+}
+
+func TestRunFull_QuorumFailure_NoStage2Or3Events(t *testing.T) {
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return CompletionResponse{}, errors.New("model unavailable")
+		},
+	}
+	c := NewCouncil(client, councilFixture(), nil)
+
+	var emitted []string
+	_ = c.RunFull(context.Background(), "q", "default", func(eventType string, _ any) {
+		emitted = append(emitted, eventType)
+	})
+
+	for _, et := range emitted {
+		if et == "stage2_complete" || et == "stage3_complete" {
+			t.Errorf("unexpected event %q emitted after quorum failure", et)
+		}
+	}
+}
+
+func TestRunFull_HappyPath_EmitsAllThreeEvents(t *testing.T) {
+	c := NewCouncil(fullPipelineClient(t), councilFixture(), nil)
+
+	var emitted []string
+	err := c.RunFull(context.Background(), "q", "default", func(eventType string, _ any) {
+		emitted = append(emitted, eventType)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{"stage1_complete", "stage2_complete", "stage3_complete"}
+	if len(emitted) != len(want) {
+		t.Fatalf("events: got %v, want %v", emitted, want)
+	}
+	for i, e := range emitted {
+		if e != want[i] {
+			t.Errorf("events[%d]: got %q, want %q", i, e, want[i])
+		}
+	}
+}
+
+func TestRunFull_Stage2CompletePayload_IsStage2CompleteData(t *testing.T) {
+	c := NewCouncil(fullPipelineClient(t), councilFixture(), nil)
+
+	var stage2Data any
+	_ = c.RunFull(context.Background(), "q", "default", func(eventType string, data any) {
+		if eventType == "stage2_complete" {
+			stage2Data = data
+		}
+	})
+
+	d, ok := stage2Data.(Stage2CompleteData)
+	if !ok {
+		t.Fatalf("stage2_complete payload: got %T, want Stage2CompleteData", stage2Data)
+	}
+	if d.Metadata.CouncilType != "default" {
+		t.Errorf("Metadata.CouncilType: got %q, want %q", d.Metadata.CouncilType, "default")
+	}
+	if len(d.Metadata.LabelToModel) == 0 {
+		t.Error("Metadata.LabelToModel: empty")
+	}
+	// AggregateRankings must be non-empty and contain real model names, not labels.
+	if len(d.Metadata.AggregateRankings) == 0 {
+		t.Error("Metadata.AggregateRankings: empty")
+	}
+	expectedModels := map[string]bool{"model-a": true, "model-b": true, "model-c": true}
+	for _, r := range d.Metadata.AggregateRankings {
+		if strings.HasPrefix(r.Model, "Response ") {
+			t.Errorf("AggregateRankings entry %q contains a label instead of a model name", r.Model)
+		}
+		if !expectedModels[r.Model] {
+			t.Errorf("AggregateRankings entry %q is not a known model", r.Model)
+		}
 	}
 }

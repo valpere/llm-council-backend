@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
 
-var errNotImplemented = errors.New("council: RunFull not yet implemented")
 var errNoChoices = errors.New("council: completion response contained no choices")
 
 // Council orchestrates the full multi-stage deliberation pipeline.
@@ -34,10 +34,87 @@ func NewCouncil(client LLMClient, registry map[string]CouncilType, logger *slog.
 // Compile-time assertion: Council implements Runner.
 var _ Runner = (*Council)(nil)
 
-// RunFull orchestrates a full council deliberation.
-// Stub — returns errNotImplemented until #86 is implemented.
-func (c *Council) RunFull(_ context.Context, _ string, _ string, _ EventFunc) error {
-	return errNotImplemented
+// RunFull orchestrates the full LCCP Core deliberation pipeline:
+// label assignment → Stage 1 → quorum check → Stage 2 → Kendall's W → Stage 3.
+// Events are emitted synchronously via onEvent so the caller can flush after each.
+// Returns *QuorumError immediately if stage 1 quorum is not met (no stage2/3 events).
+// Returns an error for unknown councilTypeName or stage 3 failures.
+func (c *Council) RunFull(ctx context.Context, query string, councilTypeName string, onEvent EventFunc) error {
+	ct, ok := c.registry[councilTypeName]
+	if !ok {
+		return fmt.Errorf("council: unknown council type %q", councilTypeName)
+	}
+
+	// Stage 1 — parallel generation across all configured models.
+	allStage1 := c.runStage1(ctx, query, ct.Models, ct.Temperature)
+
+	// Quorum check — returns *QuorumError if not enough models succeeded.
+	successful, err := checkQuorum(allStage1, ct.QuorumMin)
+	if err != nil {
+		return err
+	}
+
+	// Assign anonymous labels so peer reviewers cannot identify each other.
+	successfulModels := make([]string, len(successful))
+	for i, r := range successful {
+		successfulModels[i] = r.Model
+	}
+	labelToModel, modelToLabel := assignLabels(successfulModels)
+	for i := range successful {
+		successful[i].Label = modelToLabel[successful[i].Model]
+	}
+
+	if onEvent != nil {
+		onEvent("stage1_complete", successful)
+	}
+
+	// Stage 2 — parallel peer review.
+	stage2Results := c.runStage2(ctx, query, successful, ct.Temperature)
+
+	// Compute aggregate rankings and Kendall's W consensus coefficient.
+	// Sort labels for deterministic ranking output across runs.
+	allLabels := make([]string, 0, len(labelToModel))
+	for label := range labelToModel {
+		allLabels = append(allLabels, label)
+	}
+	sort.Strings(allLabels)
+	aggregateRankings, consensusW := CalculateAggregateRankings(stage2Results, allLabels)
+
+	// Translate label-keyed RankedModel entries to real model names for persistence/API.
+	rankedByModel := make([]RankedModel, len(aggregateRankings))
+	for i, r := range aggregateRankings {
+		if model, ok := labelToModel[r.Model]; ok {
+			r.Model = model
+		}
+		rankedByModel[i] = r
+	}
+
+	metadata := Metadata{
+		CouncilType:       councilTypeName,
+		LabelToModel:      labelToModel,
+		AggregateRankings: rankedByModel,
+		ConsensusW:        consensusW,
+	}
+
+	if onEvent != nil {
+		onEvent("stage2_complete", Stage2CompleteData{Results: stage2Results, Metadata: metadata})
+	}
+
+	// Stage 3 — Chairman synthesis.
+	labeledResponses := make(map[string]string, len(successful))
+	for _, r := range successful {
+		labeledResponses[r.Label] = r.Content
+	}
+	stage3Result, err := c.runStage3(ctx, query, stage2Results, labelToModel, consensusW, ct.ChairmanModel, ct.Temperature, labeledResponses)
+	if err != nil {
+		return err
+	}
+
+	if onEvent != nil {
+		onEvent("stage3_complete", stage3Result)
+	}
+
+	return nil
 }
 
 // runStage1 sends query to all models concurrently and returns all results.
