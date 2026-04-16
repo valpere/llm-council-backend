@@ -488,7 +488,7 @@ func TestSendMessageStream(t *testing.T) {
 	}{
 		{
 			name:   "event sequence with metadata in stage2_complete",
-			body:   `{"message":"what is Go?","council_type":"standard"}`,
+			body:   `{"content":"what is Go?","council_type":"standard"}`,
 			storer: okStorer(),
 			runner: &mockRunner{
 				runFull: func(ctx context.Context, query, ct string, onEvent council.EventFunc) error {
@@ -558,7 +558,7 @@ func TestSendMessageStream(t *testing.T) {
 		},
 		{
 			name:   "QuorumError emits error event",
-			body:   `{"message":"test","council_type":"standard"}`,
+			body:   `{"content":"test","council_type":"standard"}`,
 			storer: okStorer(),
 			runner: &mockRunner{
 				runFull: func(ctx context.Context, query, ct string, onEvent council.EventFunc) error {

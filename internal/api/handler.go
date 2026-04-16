@@ -255,15 +255,16 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Message     string `json:"message"`
+		Content     string `json:"content"`
 		CouncilType string `json:"council_type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if err := h.storage.SaveUserMessage(id, body.Message); err != nil {
+	if err := h.storage.SaveUserMessage(id, body.Content); err != nil {
 		var nfe *storage.NotFoundError
 		if errors.As(err, &nfe) {
 			h.writeError(w, http.StatusNotFound, "not found")
@@ -366,7 +367,7 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.runner.RunFull(r.Context(), body.Message, councilType, onEvent); err != nil {
+	if err := h.runner.RunFull(r.Context(), body.Content, councilType, onEvent); err != nil {
 		var qe *council.QuorumError
 		if errors.As(err, &qe) {
 			h.logger.Warn("council quorum not met", "id", id, "got", qe.Got, "need", qe.Need)

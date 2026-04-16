@@ -102,7 +102,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content, council_type: councilType }),
+        body: JSON.stringify({ content, council_type: councilType }),
       }
     );
 
