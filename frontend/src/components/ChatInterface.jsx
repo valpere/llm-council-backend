@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
+import Markdown from './Markdown';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import EmptyState from './EmptyState';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
+  sidebarOpen,
+  onToggleSidebar,
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -23,26 +27,42 @@ export default function ChatInterface({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim() && !isLoading) {
-      onSendMessage(input);
+    const text = input.trim();
+    if (text && !isLoading) {
+      // Create new conversation if none is active — handled upstream; guard here
+      onSendMessage(text);
       setInput('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }
   };
 
   const handleKeyDown = (e) => {
-    // Submit on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
     }
   };
 
+  const handleInput = (e) => {
+    setInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+  };
+
   if (!conversation) {
     return (
       <div className="chat-interface">
-        <div className="empty-state">
-          <h2>Welcome to LLM Council</h2>
-          <p>Create a new conversation to get started</p>
+        <div className="chat-header">
+          {!sidebarOpen && (
+            <button className="sidebar-open-btn" onClick={onToggleSidebar} title="Open sidebar">
+              ☰
+            </button>
+          )}
+        </div>
+        <div className="no-conversation">
+          <p>Select or create a conversation to get started</p>
         </div>
       </div>
     );
@@ -50,12 +70,20 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
+      <div className="chat-header">
+        {!sidebarOpen && (
+          <button className="sidebar-open-btn" onClick={onToggleSidebar} title="Open sidebar">
+            ☰
+          </button>
+        )}
+        {conversation.title && (
+          <span className="chat-title">{conversation.title}</span>
+        )}
+      </div>
+
       <div className="messages-container">
         {conversation.messages.length === 0 ? (
-          <div className="empty-state">
-            <h2>Start a conversation</h2>
-            <p>Ask a question to consult the LLM Council</p>
-          </div>
+          <EmptyState onSendMessage={onSendMessage} />
         ) : (
           conversation.messages.map((msg, index) => (
             <div key={index} className="message-group">
@@ -64,7 +92,7 @@ export default function ChatInterface({
                   <div className="message-label">You</div>
                   <div className="message-content">
                     <div className="markdown-content">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <Markdown>{msg.content}</Markdown>
                     </div>
                   </div>
                 </div>
@@ -73,35 +101,25 @@ export default function ChatInterface({
                   <div className="message-label">LLM Council</div>
 
                   {/* Stage 1 */}
-                  {msg.loading?.stage1 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 1: Collecting individual responses...</span>
-                    </div>
-                  )}
-                  {msg.stage1 && <Stage1 responses={msg.stage1} />}
+                  <Stage1
+                    responses={msg.stage1}
+                    isLoading={msg.loading?.stage1}
+                  />
 
                   {/* Stage 2 */}
-                  {msg.loading?.stage2 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 2: Peer rankings...</span>
-                    </div>
-                  )}
-                  {msg.stage2 && (
-                    <Stage2
-                      rankings={msg.stage2}
-                      labelToModel={msg.metadata?.label_to_model}
-                      aggregateRankings={msg.metadata?.aggregate_rankings}
-                      consensusW={msg.metadata?.consensus_w}
-                    />
-                  )}
+                  <Stage2
+                    rankings={msg.stage2}
+                    labelToModel={msg.metadata?.label_to_model}
+                    aggregateRankings={msg.metadata?.aggregate_rankings}
+                    consensusW={msg.metadata?.consensus_w}
+                    isLoading={msg.loading?.stage2}
+                  />
 
                   {/* Stage 3 */}
                   {msg.loading?.stage3 && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
-                      <span>Running Stage 3: Final synthesis...</span>
+                      <span>Synthesising final answer...</span>
                     </div>
                   )}
                   {(msg.stage3 || msg.error) && (
@@ -113,36 +131,30 @@ export default function ChatInterface({
           ))
         )}
 
-        {isLoading && (
-          <div className="loading-indicator">
-            <div className="spinner"></div>
-            <span>Consulting the council...</span>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {conversation.messages.length === 0 && (
-        <form className="input-form" onSubmit={handleSubmit}>
-          <textarea
-            className="message-input"
-            placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            rows={3}
-          />
-          <button
-            type="submit"
-            className="send-button"
-            disabled={!input.trim() || isLoading}
-          >
-            Send
-          </button>
-        </form>
-      )}
+      {/* Input is always visible when a conversation is active */}
+      <form className="input-form" onSubmit={handleSubmit}>
+        <textarea
+          ref={textareaRef}
+          className="message-input"
+          placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          disabled={isLoading}
+          rows={1}
+        />
+        <button
+          type="submit"
+          className="send-button"
+          disabled={!input.trim() || isLoading}
+        >
+          Send
+        </button>
+      </form>
     </div>
   );
 }

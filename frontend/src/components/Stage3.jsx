@@ -1,4 +1,4 @@
-import ReactMarkdown from 'react-markdown';
+import Markdown from './Markdown';
 import './Stage3.css';
 
 export default function Stage3({ finalResponse, error }) {
@@ -7,21 +7,24 @@ export default function Stage3({ finalResponse, error }) {
   }
 
   return (
-    <div className="stage stage3">
-      <h3 className="stage-title">Stage 3: Final Council Answer</h3>
+    <div className="stage3-hero">
+      <div className="stage3-header">
+        <span className="stage3-label">Final Answer</span>
+        {finalResponse && (
+          <span className="stage3-model">
+            {finalResponse.model.split('/')[1] || finalResponse.model}
+          </span>
+        )}
+      </div>
+
       {error ? (
         <div className="stage3-error">
           <span className="stage3-error-icon">⚠</span>
           <span className="stage3-error-message">{error}</span>
         </div>
       ) : (
-        <div className="final-response">
-          <div className="chairman-label">
-            Chairman: {finalResponse.model.split('/')[1] || finalResponse.model}
-          </div>
-          <div className="final-text markdown-content">
-            <ReactMarkdown>{finalResponse.content}</ReactMarkdown>
-          </div>
+        <div className="final-text markdown-content">
+          <Markdown>{finalResponse.content}</Markdown>
         </div>
       )}
     </div>

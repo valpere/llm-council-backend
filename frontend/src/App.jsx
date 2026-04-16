@@ -9,6 +9,16 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? 'dark');
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  const toggleSidebar = () => setSidebarOpen((o) => !o);
 
   const loadConversations = async () => {
     try {
@@ -161,11 +171,17 @@ function App() {
         currentConversationId={currentConversationId}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       <ChatInterface
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={toggleSidebar}
       />
     </div>
   );
