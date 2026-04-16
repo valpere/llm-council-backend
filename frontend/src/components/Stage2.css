@@ -151,3 +151,30 @@
   color: #999;
   font-size: 12px;
 }
+
+.consensus-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.consensus-strong {
+  background: #e6f4ea;
+  color: #1e7e34;
+  border: 1px solid #a8d5b5;
+}
+
+.consensus-moderate {
+  background: #fff8e1;
+  color: #8a6d00;
+  border: 1px solid #ffe082;
+}
+
+.consensus-weak {
+  background: #fdecea;
+  color: #b71c1c;
+  border: 1px solid #f5c6c6;
+}
