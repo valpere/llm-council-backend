@@ -134,7 +134,7 @@ func TestAssignLabels_LabelsAreLetters(t *testing.T) {
 // ── BuildStage3Prompt (W-guidance injection) ─────────────────────────────────
 
 func TestBuildStage3Prompt_StrongConsensus(t *testing.T) {
-	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.75)
+	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.75, nil)
 	if len(msgs) == 0 {
 		t.Fatal("expected non-empty messages")
 	}
@@ -145,7 +145,7 @@ func TestBuildStage3Prompt_StrongConsensus(t *testing.T) {
 }
 
 func TestBuildStage3Prompt_ModerateConsensus(t *testing.T) {
-	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.55)
+	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.55, nil)
 	content := msgs[0].Content
 	if !strings.Contains(content, "moderate consensus") {
 		t.Errorf("W=0.55: expected 'moderate consensus' in prompt, got:\n%s", content)
@@ -153,7 +153,7 @@ func TestBuildStage3Prompt_ModerateConsensus(t *testing.T) {
 }
 
 func TestBuildStage3Prompt_NoConsensus(t *testing.T) {
-	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.30)
+	msgs := BuildStage3Prompt("Why is the sky blue?", nil, nil, 0.30, nil)
 	content := msgs[0].Content
 	if !strings.Contains(content, "did not reach consensus") {
 		t.Errorf("W=0.30: expected 'did not reach consensus' in prompt, got:\n%s", content)
@@ -171,7 +171,7 @@ func TestBuildStage3Prompt_StructuredAttribution(t *testing.T) {
 		"Response B": "openai/gpt-4o",
 		"Response C": "google/gemini-flash",
 	}
-	msgs := BuildStage3Prompt("test query", rankings, labelToModel, 0.72)
+	msgs := BuildStage3Prompt("test query", rankings, labelToModel, 0.72, nil)
 	content := msgs[0].Content
 
 	if !strings.Contains(content, "openai/gpt-4o") {

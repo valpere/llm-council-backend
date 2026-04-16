@@ -46,10 +46,11 @@ func BuildStage2Prompt(query string, labeledResponses map[string]string) []ChatM
 }
 
 // BuildStage3Prompt returns the messages for the Stage 3 Chairman synthesis request.
-// Rankings are built from Go structs — no raw LLM text is passed through,
+// labeledResponses contains the Stage 1 candidate answers (label → content).
+// Rankings are built from Go structs — Stage 2 reviewer prose is never passed through,
 // preventing prompt injection from Stage 2 model output.
 // Kendall's W drives the synthesis guidance injected into the prompt.
-func BuildStage3Prompt(query string, rankings []StageTwoResult, labelToModel map[string]string, consensusW float64) []ChatMessage {
+func BuildStage3Prompt(query string, rankings []StageTwoResult, labelToModel map[string]string, consensusW float64, labeledResponses map[string]string) []ChatMessage {
 	var guidance string
 	switch {
 	case consensusW >= 0.70:
@@ -76,6 +77,23 @@ func BuildStage3Prompt(query string, rankings []StageTwoResult, labelToModel map
 	var sb strings.Builder
 	sb.WriteString("You were asked to answer:\n\n")
 	sb.WriteString(query)
+
+	// Include Stage 1 candidate responses so the Chairman can synthesize their content.
+	if len(labeledResponses) > 0 {
+		labels := make([]string, 0, len(labeledResponses))
+		for l := range labeledResponses {
+			labels = append(labels, l)
+		}
+		sort.Strings(labels)
+		sb.WriteString("\n\nCandidate responses:\n")
+		for _, label := range labels {
+			sb.WriteString("\n## ")
+			sb.WriteString(label)
+			sb.WriteString("\n")
+			sb.WriteString(labeledResponses[label])
+		}
+	}
+
 	sb.WriteString("\n\n")
 	sb.WriteString(guidance)
 	sb.WriteString("\n\nPeer review rankings (structured attribution — best to worst):\n")

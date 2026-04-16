@@ -3,6 +3,7 @@ package council
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -257,6 +258,114 @@ func TestRunStage2_LLMFailure_SetsError(t *testing.T) {
 	}
 	if results[2].Error != nil {
 		t.Errorf("results[2].Error: unexpected %v", results[2].Error)
+	}
+}
+
+// ── runStage3 ─────────────────────────────────────────────────────────────────
+
+func TestRunStage3_Success(t *testing.T) {
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			return makeResponse("synthesized answer"), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	result, err := c.runStage3(context.Background(), "q",
+		[]StageTwoResult{{ReviewerLabel: "Response A", Rankings: []string{"Response A", "Response B"}}},
+		map[string]string{"Response A": "model-a", "Response B": "model-b"},
+		0.75, "chairman-model", 0.3,
+		map[string]string{"Response A": "answer A", "Response B": "answer B"},
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Content != "synthesized answer" {
+		t.Errorf("Content: got %q, want %q", result.Content, "synthesized answer")
+	}
+	if result.Model != "chairman-model" {
+		t.Errorf("Model: got %q, want %q", result.Model, "chairman-model")
+	}
+	if result.DurationMs < 0 {
+		t.Errorf("DurationMs: negative %d", result.DurationMs)
+	}
+}
+
+func TestRunStage3_ClientError_WrappedAndModelPreserved(t *testing.T) {
+	errBoom := errors.New("network failure")
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return CompletionResponse{}, errBoom
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	result, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model", 0.3, nil)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, errBoom) {
+		t.Errorf("error chain: want errBoom, got %v", err)
+	}
+	if result.Model != "chairman-model" {
+		t.Errorf("Model: got %q, want %q on error", result.Model, "chairman-model")
+	}
+}
+
+func TestRunStage3_EmptyChoices_WrappedError(t *testing.T) {
+	client := &mockLLMClient{
+		complete: func(_ context.Context, _ CompletionRequest) (CompletionResponse, error) {
+			return CompletionResponse{}, nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	_, err := c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman-model", 0.3, nil)
+
+	if err == nil {
+		t.Fatal("expected error for empty choices, got nil")
+	}
+	if !errors.Is(err, errNoChoices) {
+		t.Errorf("error chain: want errNoChoices, got %v", err)
+	}
+}
+
+func TestRunStage3_UsesChairmanModel(t *testing.T) {
+	var gotModel string
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			gotModel = req.Model
+			return makeResponse("ok"), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	c.runStage3(context.Background(), "q", nil, nil, 0.5, "my-chairman", 0.3, nil) //nolint:errcheck
+
+	if gotModel != "my-chairman" {
+		t.Errorf("Model: got %q, want %q", gotModel, "my-chairman")
+	}
+}
+
+func TestRunStage3_Stage1ContentAndTemperatureForwarded(t *testing.T) {
+	var gotReq CompletionRequest
+	client := &mockLLMClient{
+		complete: func(_ context.Context, req CompletionRequest) (CompletionResponse, error) {
+			gotReq = req
+			return makeResponse("ok"), nil
+		},
+	}
+	c := NewCouncil(client, nil, nil)
+	c.runStage3(context.Background(), "q", nil, nil, 0.5, "chairman", 0.3, //nolint:errcheck
+		map[string]string{"Response A": "the actual answer"},
+	)
+
+	if gotReq.Temperature != 0.3 {
+		t.Errorf("Temperature: got %v, want 0.3", gotReq.Temperature)
+	}
+	if len(gotReq.Messages) == 0 {
+		t.Fatal("Messages: empty")
+	}
+	if !strings.Contains(gotReq.Messages[0].Content, "the actual answer") {
+		t.Error("stage1 content missing from chairman prompt")
 	}
 }
 
