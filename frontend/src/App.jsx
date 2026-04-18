@@ -51,6 +51,17 @@ function App() {
     loadConversations();
   }, []);
 
+  // Sync currentConversation title from conversations list (updated after title_complete)
+  useEffect(() => {
+    if (!currentConversationId || !conversations.length) return;
+    const conv = conversations.find((c) => c.id === currentConversationId);
+    if (!conv?.title) return;
+    setCurrentConversation((prev) => {
+      if (!prev || prev.title === conv.title) return prev;
+      return { ...prev, title: conv.title };
+    });
+  }, [conversations, currentConversationId]);
+
   // Load conversation details when selected
   useEffect(() => {
     if (currentConversationId) {

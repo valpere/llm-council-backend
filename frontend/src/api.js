@@ -13,15 +13,16 @@
  * in response to those events; this module remains stateless.
  */
 
+// In development the Vite dev server proxies /api → backend (see vite.config.js).
+// VITE_API_BASE is only needed for production builds served from a different
+// origin than the API (e.g. a CDN). Leave it unset for local development.
 const API_BASE = (() => {
   const raw = import.meta.env.VITE_API_BASE;
-  if (typeof raw !== 'string') {
-    return 'http://localhost:8001';
+  if (!raw || typeof raw !== 'string') {
+    return ''; // relative URLs — Vite proxy in dev, same-origin in prod
   }
-  // Trim whitespace and strip trailing slashes so `${API_BASE}/api/...`
-  // does not produce `//api/...`. Treat empty/whitespace as "unset".
   const trimmed = raw.trim().replace(/\/+$/, '');
-  return trimmed || 'http://localhost:8001';
+  return trimmed || '';
 })();
 
 export const api = {

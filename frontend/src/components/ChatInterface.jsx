@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Markdown from './Markdown';
+import { stripMarkdown } from '../utils';
+
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
@@ -14,16 +16,13 @@ export default function ChatInterface({
   onToggleSidebar,
 }) {
   const [input, setInput] = useState('');
-  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
-  }, [conversation]);
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [conversation?.messages]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -77,11 +76,11 @@ export default function ChatInterface({
           </button>
         )}
         {conversation.title && (
-          <span className="chat-title">{conversation.title}</span>
+          <span className="chat-title">{stripMarkdown(conversation.title)}</span>
         )}
       </div>
 
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
         {conversation.messages.length === 0 ? (
           <EmptyState onSendMessage={onSendMessage} isLoading={isLoading} />
         ) : (
@@ -131,7 +130,6 @@ export default function ChatInterface({
           ))
         )}
 
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input is always visible when a conversation is active */}

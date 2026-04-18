@@ -1,34 +1,9 @@
-> **This document describes the v1 implementation**, archived on the `archive/v1` branch.
-> The repository is currently in the **planning phase for v2**.
-> See [`docs/council-research-synthesis.md`](docs/council-research-synthesis.md) and
-> [`docs/council-research-gaps.md`](docs/council-research-gaps.md) for the current source of truth.
+# LLM Council
 
----
-
-# LLM Council — Backend
-
-A Go HTTP backend implementing a **3-stage multi-LLM deliberation system**. Rather
-than asking a single AI model for an answer, LLM Council assembles a council of
-models that independently respond, anonymously review each other, and have a
-designated Chairman synthesize a final answer.
-
-The frontend (React + Vite) lives in the `frontend/` directory in this repo.
-
----
-
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Language | Go 1.25+ |
-| HTTP server | `net/http` (stdlib) |
-| Concurrency | `sync.WaitGroup` + per-conversation `sync.Mutex` (stdlib) |
-| Streaming | Server-Sent Events over `net/http` |
-| Storage | JSON files on disk (no database) |
-| LLM gateway | [OpenRouter](https://openrouter.ai) REST API |
-| Config | Environment variables + `godotenv` |
-| ID generation | `github.com/google/uuid` |
-| Frontend | React + Vite (`frontend/` directory) |
+A multi-LLM deliberation system. Rather than asking a single AI model for an
+answer, LLM Council assembles a council of models that independently respond,
+anonymously review each other, and have a designated Chairman synthesize a
+final answer.
 
 ---
 
@@ -66,22 +41,37 @@ User query
 
 **Why three stages?**
 
-- **Stage 1** surfaces a diversity of perspectives — each model answers
-  independently, so you get genuinely different approaches rather than one
-  model's blind spots.
+- **Stage 1** surfaces diverse perspectives — each model answers independently,
+  so you get genuinely different approaches rather than one model's blind spots.
 - **Stage 2** adds a credibility signal — peers evaluate each other without
   knowing authorship, producing a bias-reduced quality ranking ("street cred").
 - **Stage 3** leverages the Chairman's synthesis ability — a single model reads
-  all responses *and* the peer rankings, giving it the full picture to write
-  the best possible answer.
+  all responses *and* the peer rankings, giving it the full picture to write the
+  best possible answer.
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Go 1.26+ |
+| HTTP server | `net/http` (stdlib) |
+| Concurrency | `sync.WaitGroup` + per-conversation `sync.Mutex` (stdlib) |
+| Streaming | Server-Sent Events over `net/http` |
+| Storage | JSON files on disk (no database) |
+| LLM gateway | [OpenRouter](https://openrouter.ai) REST API |
+| Config | Environment variables + `godotenv` |
+| ID generation | `crypto/rand` (stdlib) |
+| Frontend | React 19 + Vite 8 (`frontend/` directory) |
 
 ---
 
 ## Prerequisites
 
-- **Go 1.25+**
-- An **[OpenRouter](https://openrouter.ai) API key** (provides access to all
-  the LLMs through one endpoint)
+- **Go 1.26+**
+- **Node.js 20+** (for the frontend)
+- An **[OpenRouter](https://openrouter.ai) API key**
 
 ---
 
@@ -92,22 +82,28 @@ User query
 git clone git@github.com:valpere/llm-council.git
 cd llm-council
 
-# 2. Create your .env file
+# 2. Configure the backend
 cp .env.example .env
-# Edit .env and set OPENROUTER_API_KEY
+# Edit .env — set OPENROUTER_API_KEY and choose your council models
 
-# 3. Run the development server
+# 3. Run the backend
 make dev
 # → LLM Council API listening on :8001
 ```
 
-Then start the frontend and open it in your browser:
+In a second terminal, start the frontend:
 
 ```bash
-cd frontend && npm ci && npm run dev
+# 4. Install frontend deps (first time only)
+cd frontend && npm ci
+
+# 5. Start the frontend dev server
+make fr-dev
+# → http://localhost:5173
 ```
 
-Or run both together with `make dev-all`.
+The Vite dev server proxies all `/api` requests to the backend at `:8001`
+automatically — no extra config needed.
 
 ---
 
@@ -118,30 +114,40 @@ All configuration is done via environment variables. Copy `.env.example` to
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | **Yes** | — | Your OpenRouter API key. The server starts without it but every LLM call will fail with 401. |
-| `COUNCIL_MODELS` | No | 4 preset models¹ | Comma-separated list of OpenRouter model IDs to use as council members. |
-| `CHAIRMAN_MODEL` | No | `google/gemini-3-pro-preview` | Model used for Stage 3 synthesis. |
+| `OPENROUTER_API_KEY` | **Yes** | — | Your OpenRouter API key. |
+| `COUNCIL_MODELS` | No | 3 small dev fallbacks¹ | Comma-separated list of OpenRouter model IDs for council members. |
+| `CHAIRMAN_MODEL` | No | `openai/gpt-4o-mini`¹ | Model used for Stage 3 synthesis. |
+| `DEFAULT_COUNCIL_TYPE` | No | `default` | Council pipeline variant. Only `default` is currently supported. |
+| `DEFAULT_COUNCIL_TEMPERATURE` | No | `0.7` | Sampling temperature for all LLM calls (0.0–2.0). |
 | `DATA_DIR` | No | `data/conversations` | Directory where conversation JSON files are stored. |
 | `PORT` | No | `8001` | TCP port the server listens on. |
 
-¹ Default council: `openai/gpt-5.1`, `google/gemini-3-pro-preview`,
-`anthropic/claude-sonnet-4.5`, `x-ai/grok-4`
+¹ When `COUNCIL_MODELS` or `CHAIRMAN_MODEL` are unset the server logs a warning
+and falls back to small, inexpensive models suitable for local development only.
+See `.env.example` for recommended production values.
+
+For the frontend, see `frontend/.env.example`.
 
 ---
 
 ## Development
 
 ```bash
-make dev        # Run without compiling (go run ./cmd/server)
+# Backend
 make build      # Compile to bin/llm-council
-make run        # Compile then run the binary
-make test       # Run all tests
-make lint       # Run go vet ./...
-make clean      # Remove bin/
+make dev        # Run without compiling (go run ./cmd/server)
+make lint       # go vet + staticcheck
+make test       # go test -race -count=1 ./...
+make clean      # Remove bin/llm-council
+
+# Frontend
+make fr-dev     # Vite dev server on localhost:5173
+make fr-build   # Production build to frontend/dist/
+make fr-lint    # ESLint
 ```
 
-> Always run `make` commands from the **project root**, not from a subdirectory.
-> The server resolves `DATA_DIR` (default: `data/conversations/`) relative to the working directory.
+> Always run `make` commands from the **project root**.
+> The server resolves `DATA_DIR` relative to the working directory.
 
 ---
 
@@ -158,15 +164,14 @@ make clean      # Remove bin/
 
 ### Streaming events (`/message/stream`)
 
-The streaming endpoint uses
-[Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events).
-Each event is a `data:` line containing a JSON object with a `type` field:
+Uses [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events).
+Each event is a `data:` line with a JSON object containing a `type` field:
 
 ```
 data: {"type":"stage1_start"}
 data: {"type":"stage1_complete","data":[...]}
 data: {"type":"stage2_start"}
-data: {"type":"stage2_complete","data":[...],"metadata":{"label_to_model":{...},"aggregate_rankings":[...]}}
+data: {"type":"stage2_complete","data":[...],"metadata":{"label_to_model":{...},"aggregate_rankings":[...],"consensus_w":0.72}}
 data: {"type":"stage3_start"}
 data: {"type":"stage3_complete","data":{...}}
 data: {"type":"title_complete","data":{"title":"..."}}
@@ -177,8 +182,7 @@ On any error: `data: {"type":"error","message":"..."}` — the stream then close
 
 ### Conversation storage format
 
-Each conversation is stored as a single JSON file under the directory configured
-by `DATA_DIR` (default: `data/conversations/`):
+Each conversation is a single JSON file under `DATA_DIR`:
 
 ```json
 {
@@ -207,11 +211,34 @@ llm-council/
 │   │   └── types.go              Result types: StageOneResult, StageTwoResult, etc.
 │   ├── storage/storage.go        JSON file persistence with atomic writes and per-conv locks
 │   └── api/handler.go            HTTP handlers, CORS middleware, SSE streaming
+├── frontend/                     React 19 + Vite 8 single-page app (see below)
 ├── docs/                         Architecture, stage logic, and implementation notes
 ├── data/conversations/           Created at runtime — one JSON file per conversation
 ├── Makefile
-├── .env.example                  Template for all supported environment variables
-└── go.mod                        Module: llm-council, Go 1.25+, two external deps
+├── .env.example                  Template for all supported backend environment variables
+└── go.mod                        Module: llm-council, Go 1.26+
+```
+
+### Frontend structure
+
+```
+frontend/
+├── src/
+│   ├── api.js                    API adapter — all fetch/SSE calls; only file that talks to the backend
+│   ├── App.jsx                   Root component; owns all application state
+│   ├── theme.css                 CSS design tokens (dark/light themes via data-theme attribute)
+│   ├── index.css                 Global styles and typography
+│   └── components/
+│       ├── ChatInterface.jsx/css  Main chat view + always-visible input
+│       ├── Sidebar.jsx/css        Collapsible conversation list with theme toggle
+│       ├── Stage1.jsx/css         Individual responses — collapsed accordion
+│       ├── Stage2.jsx/css         Peer rankings — collapsed accordion with consensus score
+│       ├── Stage3.jsx/css         Final answer — always-expanded hero card
+│       ├── EmptyState.jsx/css     Welcome screen with suggested prompt chips
+│       └── Markdown.jsx           react-markdown + rehype-highlight wrapper
+├── index.html
+├── vite.config.js
+└── package.json
 ```
 
 ---
@@ -219,9 +246,8 @@ llm-council/
 ## Design notes
 
 **Minimal dependencies.** The server uses only the Go standard library for HTTP,
-JSON, concurrency, and file I/O. The two external packages are
-`github.com/google/uuid` for conversation IDs and `github.com/joho/godotenv`
-to load `.env` files. No framework, no ORM, no database.
+JSON, concurrency, file I/O, and UUID generation (`crypto/rand`). The only
+external package is `github.com/joho/godotenv` to load `.env` files.
 
 **Atomic storage.** Conversation files are written to a `.tmp` file and then
 renamed into place, so a crash mid-write never leaves a corrupt file. Concurrent
@@ -229,44 +255,16 @@ writes to the same conversation are serialized with a per-conversation mutex.
 
 **Bias-free peer review.** Stage 2 labels (A–Z) are assigned to a *shuffled*
 order of Stage 1 results each request, so no model is systematically favored by
-always being "Response A". The label-to-model mapping is ephemeral — computed
-per request, returned in the API response, but never persisted.
+always being "Response A". The label-to-model mapping is ephemeral — computed per
+request and returned in the API response, but never persisted.
 
 **Graceful degradation.** If one council model fails in Stage 1 or Stage 2, the
 pipeline continues with the successful responses. On total Stage 1 failure the
-behaviour depends on the endpoint: the JSON endpoint
-(`POST /api/conversations/{id}/message`) returns HTTP 200 with an error message
-embedded in `stage3.response`, while the streaming endpoint emits a
-`{"type":"error",...}` SSE event and closes the stream.
+streaming endpoint emits a `{"type":"error",...}` SSE event and closes the stream.
 
----
-
-## Frontend
-
-The React UI lives in `frontend/`. It is a single-page app built with React 19 + Vite 8 (plain JavaScript, no TypeScript).
-
-### Quick start
-
-```bash
-cd frontend && npm ci && npm run dev
-```
-
-The dev server starts on `:5173` and proxies all `/api` requests to the backend at `:8001`. Run `make dev-all` to start both together.
-
-### Directory
-
-```
-frontend/
-  src/
-    api.js               # API adapter (all fetch calls)
-    App.jsx              # root component + state
-    components/          # Stage1, Stage2, Stage3, ChatInterface, Sidebar
-  index.html
-  vite.config.js
-  package.json
-```
-
-See `docs/frontend/` for architecture, API contract, and SSE streaming docs.
+**Frontend architecture rules.** Components are pure UI — no `fetch` calls
+inside components. `api.js` is the sole adapter layer. `App.jsx` owns all state.
+`react-markdown` is the only renderer for LLM output (XSS risk with raw HTML).
 
 ---
 

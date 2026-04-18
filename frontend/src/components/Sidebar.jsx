@@ -1,4 +1,5 @@
 import './Sidebar.css';
+import { stripMarkdown } from '../utils';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -45,7 +46,7 @@ export default function Sidebar({
                 onClick={() => onSelectConversation(conv.id)}
               >
                 <div className="conversation-title">
-                  {conv.title || 'New Conversation'}
+                  {stripMarkdown(conv.title || 'New Conversation')}
                 </div>
                 <div className="conversation-meta">
                   {formatDate(conv.created_at)}
