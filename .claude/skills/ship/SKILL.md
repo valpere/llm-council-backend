@@ -4,9 +4,9 @@ description: Implement a GitHub issue end-to-end — branch, code, tests, PR, Co
 user-invocable: true
 argument-hint: "[issue-number | issue-title]"
 metadata:
-  version: "3.0"
+  version: "3.1"
   author: backend-claude
-  last_updated: "2026-03-21"
+  last_updated: "2026-04-16"
 ---
 
 # /ship
@@ -14,7 +14,7 @@ metadata:
 Implement one GitHub issue from selection to merged PR, then present the next.
 
 ```
-select issue → branch → implement → pre-flight → PR → Copilot (once) → address → merge → Resolved → next
+select issue → read issue + files → resolve uncertainties → branch → implement → pre-flight → PR → Copilot (once) → address → merge → Resolved → next
 ```
 
 ## Rules
@@ -85,7 +85,31 @@ Run `go build ./...` to confirm baseline compiles.
 
 ---
 
-## Step 3: Create branch and implement
+## Step 3: Resolve uncertainties
+
+Before touching any code, identify everything that is ambiguous or has more than one valid approach.
+
+**Look for:**
+- Naming mismatches — env var names, field names, or method signatures that differ between the issue, `CLAUDE.md`, `.env.example`, and existing code
+- Multiple valid implementation approaches with real trade-offs
+- Missing prerequisites — types, interfaces, or packages the issue depends on that don't exist yet
+- Conflicting constraints — two parts of the spec that can't both be satisfied as written
+
+**For each ambiguity, investigate first.** Read related files — `CLAUDE.md`, `docs/`, `.env.example`, existing package code — to find a ground truth. Many apparent ambiguities resolve silently from the codebase.
+
+**Then decide:**
+
+| Situation | Action |
+|-----------|--------|
+| One clear answer from docs/code | Resolve silently. Note the source. Proceed. |
+| Multiple valid options with real trade-offs | List them numbered. **Stop and wait for user selection.** |
+| No solution found — spec is genuinely incomplete | State what is missing. **Stop and ask for clarification.** |
+
+Do not branch until all uncertainties are resolved. A question answered before implementation costs nothing; a question discovered during Copilot review costs a round-trip.
+
+---
+
+## Step 4: Create branch and implement
 
 ```bash
 git checkout -b <type>/<slug>   # e.g. fix/cors-origins, test/handler-tests
@@ -103,7 +127,7 @@ internal/openrouter/   ← LLM calls; no council, no storage
 
 ---
 
-## Step 4: Pre-flight
+## Step 5: Pre-flight
 
 ```bash
 go build ./...
@@ -122,7 +146,7 @@ Fix any failures from your changes before proceeding. Note pre-existing failures
 
 ---
 
-## Step 5: Create PR
+## Step 6: Create PR
 
 Push the branch and open a PR:
 
@@ -151,7 +175,7 @@ Debt emoji: `⚡` quick-fix · `⚖️` balanced · `🏗️` proper-refactor
 
 ---
 
-## Step 6: Wait for Copilot review (poll yourself)
+## Step 7: Wait for Copilot review (poll yourself)
 
 Check review status yourself — do not ask the user:
 
@@ -169,7 +193,7 @@ Once Copilot has posted its review (or 5 minutes have elapsed with no review), p
 
 ---
 
-## Step 7: Address Copilot comments (if any)
+## Step 8: Address Copilot comments (if any)
 
 Fetch the review comments:
 
@@ -194,7 +218,7 @@ git push
 
 ---
 
-## Step 8: Merge
+## Step 9: Merge
 
 ```bash
 gh pr merge <number> --squash --delete-branch
@@ -203,12 +227,12 @@ git checkout main && git pull
 
 ---
 
-## Step 9: Resolve and report
+## Step 10: Resolve and report
 
 The `Closes #N` in the PR body auto-closes the issue on merge. Verify:
 
 ```bash
-gh issue view <number> --repo valpere/llm-council --json state,stateReason
+gh issue view <number> --repo valpere/llm-council --json state,closed
 ```
 
 If not closed automatically:
@@ -220,7 +244,7 @@ Report: issue closed, PR merged, what Copilot flagged (if anything).
 
 ---
 
-## Step 10: Present next issue
+## Step 11: Present next issue
 
 Show the next unblocked issue from the queue (same query as Step 0, skip already-resolved).
 **Do not start implementing it** — wait for the user's command.
