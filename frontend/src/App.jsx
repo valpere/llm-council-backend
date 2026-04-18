@@ -106,7 +106,7 @@ function App() {
         stage3: null,
         metadata: null,
         loading: {
-          stage1: false,
+          stage1: true,
           stage2: false,
           stage3: false,
         },
