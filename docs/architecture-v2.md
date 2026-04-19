@@ -57,10 +57,12 @@ internal/council
     └── must not import: net/http, internal/storage, internal/api, internal/openrouter
 
 internal/storage
-    └── must not import: net/http, internal/council, internal/openrouter
+    ├── may import: internal/council (for council.AssistantMessage persistence type)
+    └── must not import: net/http, internal/openrouter, internal/api
 
 internal/openrouter
-    └── must not import: internal/council, internal/storage, internal/api
+    ├── may import: internal/council (for council.CompletionRequest/Response and LLMClient interface)
+    └── must not import: internal/storage, internal/api
 
 internal/config
     └── must not import any other internal/* package
@@ -162,8 +164,8 @@ Key design constraints:
 
 These four rules are enforced in every code review — any violation must be flagged:
 
-1. **Components are pure UI.** No component may call `fetch`, `XMLHttpRequest`, or import `api.js`.
-2. **`src/api.js` is the sole network boundary.** HTTP status codes and raw SSE lines never leak past this module. The only interface `App.jsx` sees is `onEvent(type, event)`.
+1. **Components under `frontend/src/components/` are pure UI.** They must not call `fetch`, `XMLHttpRequest`, or import `api.js`.
+2. **`src/api.js` is the sole network boundary.** `App.jsx` is the only file that may import it. HTTP status codes and raw SSE lines never leak past this module. The only interface `App.jsx` sees is `onEvent(type, event)`.
 3. **`App.jsx` owns all state.** Only `App.jsx` calls `setCurrentConversation` / `setConversations`. State flows down via props; events flow up via callbacks.
 4. **`react-markdown` is the only renderer for LLM output.** Injecting raw HTML directly into the DOM is forbidden — LLM-generated content is untrusted and must go through the Markdown component.
 
