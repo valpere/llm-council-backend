@@ -17,7 +17,7 @@ transitions.
 | `stage2_running` | backend + frontend | All models peer-reviewing concurrently |
 | `stage2_done` | backend + frontend | Rankings and Kendall's W computed |
 | `stage3_running` | backend + frontend | Chairman model synthesising final answer |
-| `complete` | frontend | All stages done; title saved; input re-enabled |
+| `complete` | frontend | All stages done; title may have been saved (timeout possible); input re-enabled |
 | `error` | frontend | Pipeline failed at any stage; input re-enabled |
 
 ---
@@ -40,7 +40,7 @@ stateDiagram-v2
     stage2_running --> error : error event
 
     stage2_done --> stage3_running : (immediate — no event boundary)
-    stage3_running --> complete : stage3_complete → title_complete → complete events
+    stage3_running --> complete : stage3_complete → [title_complete] → complete events
     stage3_running --> error : error event
 
     complete --> idle : setIsLoading(false)
@@ -54,7 +54,7 @@ stateDiagram-v2
 | SSE event | Backend trigger | Frontend handler | State after |
 |-----------|----------------|-----------------|-------------|
 | *(connection open)* | SSE headers sent | assistant placeholder added; `loading.stage1=true` | `stage1_running` |
-| `stage1_complete` | `runStage1` done | `msg.stage1 = data`; `loading.stage1 = false` | `stage1_done` / `stage2_running` |
+| `stage1_complete` | Stage 1 quorum met and labels assigned (not emitted if quorum fails) | `msg.stage1 = data`; `loading.stage1 = false` | `stage1_done` / `stage2_running` |
 | `stage2_complete` | `runStage2` + rankings done | `msg.stage2 = data`; `msg.metadata = metadata`; `loading.stage2 = false` | `stage2_done` / `stage3_running` |
 | `stage3_complete` | `runStage3` done | `msg.stage3 = data`; `loading.stage3 = false` | `stage3_running` → done |
 | `title_complete` | title goroutine done | `loadConversations()` (sidebar refresh) | *(no stage change)* |
@@ -93,8 +93,13 @@ delivers its first byte.
 | Flag | `true` | `false` (with data) | `false` (no data) |
 |------|--------|--------------------|--------------------|
 | `loading.stage1` | Stage1: spinner + "Collecting individual responses…" | Stage1: accordion header with model count | Stage1: hidden (`null`) |
-| `loading.stage2` | Stage2: spinner header | Stage2: rankings + consensus badge | Stage2: hidden |
-| `loading.stage3` | ChatInterface: `<div class="stage-loading">` spinner | Stage3: hero card (always expanded) | Stage3: hidden |
+| `loading.stage2` | *(unreachable — no current code sets this to `true`)* | Stage2: rankings + consensus badge | Stage2: hidden until `stage2_complete` arrives |
+| `loading.stage3` | *(unreachable — no current code sets this to `true`)* | Stage3: hero card (always expanded) | Stage3: hidden until `stage3_complete` arrives |
+
+**Current protocol note:** the backend emits only `*_complete` events, never `*_start`.
+`App.jsx` handles `stage2_start` and `stage3_start` in its SSE handler map but they are
+never received; `loading.stage2` and `loading.stage3` are therefore always `false` in
+practice. These flags are reserved for a future `*_start` protocol extension.
 
 ---
 
@@ -163,25 +168,27 @@ An `error` SSE event can arrive at any point after the SSE connection opens:
 
 ## Title generation
 
-Title generation runs in a goroutine on the backend, **after** `stage3_complete` is
-emitted:
+After `stage3_complete` and saving the assistant message, the backend derives a title and
+then emits `complete`. The handler **blocks** on a 30-second deadline waiting for the title
+goroutine before emitting `complete`:
 
 ```
-stage3_complete → [save assistant message to storage] → goroutine: derive title
-                                                              │
-                                                    title_complete (may arrive after complete)
-                                                              │
-                                                    complete
+stage3_complete
+    → save assistant message to storage
+    → start title goroutine
+    → select { title ready → SaveTitle → emit title_complete
+               30s timeout → log warning (no title_complete) }
+    → emit complete
 ```
 
-The title is the first 50 **bytes** of the Stage 3 response (byte-truncated, not
-rune-safe). If title generation times out (30-second deadline), `title_complete` is never
-emitted and the conversation title remains the previous value.
+This means `title_complete` (when emitted) **always arrives before `complete`** — the
+ordering is guaranteed by the `select` block in `sendMessageStream`.
+
+For the **streaming** `/message/stream` endpoint, the title is derived from the first 50
+**bytes** of the Stage 3 response (byte-truncated, not rune-safe). The **non-streaming**
+`/message` endpoint differs: it truncates to 50 **runes** (`utf8.RuneCountInString`). If
+title generation times out (30-second deadline), `title_complete` is never emitted and the
+conversation title remains unchanged.
 
 `title_complete` triggers `loadConversations()` in `App.jsx`, which refreshes the sidebar
 list and — via a `useEffect` — syncs `currentConversation.title` so the header updates.
-
-Because the title goroutine is started before `complete` is emitted, `title_complete`
-normally arrives **before** `complete`. However, this ordering is not guaranteed under
-load; the frontend handles both orderings correctly because each event handler is
-independent.
