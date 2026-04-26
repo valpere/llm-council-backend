@@ -19,9 +19,17 @@ HTTP POST /api/conversations/{id}/message[/stream]
     │
     ▼
 api.Handler.sendMessage / sendMessageStream      [internal/api/handler.go]
-    │   1. validate UUID, body size, content
-    │   2. persist user message
-    │   3. call council.RunFull(ctx, query, councilType, onEvent)
+    │   1. validate UUID, body size, content XOR answers
+    │   2. persist user message (round-1) OR load+update clarification round (round-N)
+    │
+    │   ┌─ Stage 0 (planned — issue #154, gated by CLARIFICATION_MAX_ROUNDS > 0) ──────────┐
+    │   │  3. council.RunClarificationRound(ctx, query, history, councilType, onEvent)       │
+    │   │     └── emit stage0_round_complete → stream closes (awaiting client answers)       │
+    │   │     OR  emit stage0_done → fall through to Stage 1                                 │
+    │   └─────────────────────────────────────────────────────────────────────────────────  ─┘
+    │
+    │   4. call council.RunFullWithClarifications(ctx, query, history, councilType, onEvent)
+    │      (builds augmented prompt internally; delegates to RunFull)
     ▼
 council.Council.RunFull                          [internal/council/runner.go]
     │
@@ -41,11 +49,68 @@ council.Council.RunFull                          [internal/council/runner.go]
     │
     ▼
 api.Handler:
-    4. persist assistant message
-    5. spawn title goroutine; select on 30s deadline
-    6. emit title_complete (if title generated in time)
-    7. emit complete
+    5. persist assistant message
+    6. spawn title goroutine; select on 30s deadline
+    7. emit title_complete (if title generated in time)
+    8. emit complete
 ```
+
+---
+
+## 0. Stage 0: Clarification *(planned — issue #154)*
+
+**Files:** `internal/council/runner.go`, `internal/council/council.go`, `internal/storage/storage.go`
+
+Stage 0 is config-gated: only runs when `CLARIFICATION_MAX_ROUNDS > 0`. When disabled (default), execution jumps directly to Section 1 below.
+
+### Generator phase
+
+All council generators run in parallel (same fan-out pattern as Stage 1). Each receives `BuildStage0GeneratorPrompt(query, history)` and must return strict JSON:
+
+```json
+{"questions": [{"text": "What database are you currently using?"}]}
+```
+
+Malformed JSON from a generator → that generator contributes 0 questions (does not stall the wait group). Quorum check applies: fewer than M_min successful responses → `503`.
+
+### Chairman phase
+
+All candidate questions are collected and passed to `BuildStage0ChairmanPrompt(...)`. The chairman uses `ResponseFormat: json_object` and must return:
+
+```json
+{"questions": [{"id": "q1", "text": "..."}], "enough": bool}
+```
+
+Chairman trims to `CLARIFICATION_MAX_QUESTIONS_PER_ROUND`. Malformed JSON → fail-open (WARN log + treat as `enough: true`).
+
+### Termination paths (all emit `stage0_done`, then Stage 1 proceeds)
+
+| Condition | When checked |
+|-----------|--------------|
+| `CLARIFICATION_MAX_ROUNDS == 0` | Feature entry |
+| `round > MAX_ROUNDS` | Top of each round |
+| Accumulated questions ≥ `MAX_TOTAL_QUESTIONS` | Top of each round |
+| User submitted all-empty answers (round > 1) | Top of each round |
+| Chairman returns `enough: true` | After chairman call |
+| Chairman returns zero questions | After chairman call |
+| Chairman JSON malformed | Fail-open: WARN log, then `stage0_done` |
+
+### Augmented query
+
+`RunFullWithClarifications` calls `BuildAugmentedQuery(originalQuery, history)` internally before passing to `RunFull`:
+
+```
+Original question: Should I migrate to Postgres?
+
+## User clarifications
+Q: What database are you currently using and at what scale?
+A: MySQL 5.7, ~2k writes/sec
+
+Q: What is prompting this migration?
+A: Need JSONB and better full-text search
+```
+
+Stage 1/2/3 prompts are unchanged — they receive the augmented string as `query`.
 
 ---
 
@@ -64,10 +129,11 @@ For both endpoints (`POST /api/conversations/{id}/message` and
    at 1 MiB before `json.NewDecoder(r.Body).Decode(&req)`.
 4. **Path parameter validation** — `{id}` is matched against the UUID v4 regex
    `^[0-9a-f]{8}-...-4...-[89ab]...$` before any storage call. Mismatch → `400`.
-5. **Body decoding** — request shape:
+5. **Body decoding** — request shape (current):
    ```json
    { "content": "...", "council_type": "default" }
    ```
+   Planned (issue #154): XOR — `content` for round-1, `answers:[{id,text}]` for round-N.
    `council_type` defaults to the `DEFAULT_COUNCIL_TYPE` env var if missing/empty.
 6. **Content non-empty check** — empty `content` → `400`.
 7. **Conversation lookup** — `store.Get(id)` returns `*Conversation` or `ErrNotFound`
