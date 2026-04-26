@@ -88,14 +88,13 @@ export const api = {
   },
 
   /**
-   * Send a message and receive streaming updates.
+   * Send a message or clarification answers and receive streaming updates.
    * @param {string} conversationId - The conversation ID
-   * @param {string} content - The message content
-   * @param {string} councilType - The council type to use (default: 'default')
+   * @param {Object} body - `{content, council_type}` for a new message, or `{answers:[...]}` for a clarification round
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, councilType = 'default', onEvent) {
+  async sendMessageStream(conversationId, body, onEvent) {
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
@@ -103,7 +102,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content, council_type: councilType }),
+        body: JSON.stringify(body),
       }
     );
 

@@ -17,12 +17,15 @@ import (
 // ── mocks ────────────────────────────────────────────────────────────────────
 
 type mockStorer struct {
-	listConversations    func() ([]storage.ConversationMeta, error)
-	createConversation   func() (*storage.Conversation, error)
-	getConversation      func(string) (*storage.Conversation, error)
-	saveUserMessage      func(string, string) error
-	saveAssistantMessage func(string, council.AssistantMessage) error
-	saveTitle            func(string, string) error
+	listConversations          func() ([]storage.ConversationMeta, error)
+	createConversation         func() (*storage.Conversation, error)
+	getConversation            func(string) (*storage.Conversation, error)
+	saveUserMessage            func(string, string) error
+	saveAssistantMessage       func(string, council.AssistantMessage) error
+	saveTitle                  func(string, string) error
+	saveClarificationRound     func(string, int, []council.ClarificationQuestion, string) error
+	updateClarificationAnswers func(string, int, []council.ClarificationAnswer) error
+	getLastClarificationRound  func(string) (*council.ClarificationRound, error)
 }
 
 func (m *mockStorer) ListConversations() ([]storage.ConversationMeta, error) {
@@ -61,6 +64,24 @@ func (m *mockStorer) SaveTitle(id, title string) error {
 	}
 	return nil
 }
+func (m *mockStorer) SaveClarificationRound(id string, round int, questions []council.ClarificationQuestion, councilType string) error {
+	if m.saveClarificationRound != nil {
+		return m.saveClarificationRound(id, round, questions, councilType)
+	}
+	return nil
+}
+func (m *mockStorer) UpdateClarificationAnswers(id string, round int, answers []council.ClarificationAnswer) error {
+	if m.updateClarificationAnswers != nil {
+		return m.updateClarificationAnswers(id, round, answers)
+	}
+	return nil
+}
+func (m *mockStorer) GetLastClarificationRound(id string) (*council.ClarificationRound, error) {
+	if m.getLastClarificationRound != nil {
+		return m.getLastClarificationRound(id)
+	}
+	return nil, nil
+}
 
 type mockRunner struct {
 	runFull func(context.Context, string, string, council.EventFunc) error
@@ -73,14 +94,54 @@ func (m *mockRunner) RunFull(ctx context.Context, query, councilType string, onE
 	return nil
 }
 
+// mockStage0Runner implements council.Stage0Runner for tests.
+type mockStage0Runner struct {
+	runClarificationRound     func(context.Context, string, []council.ClarificationRound, council.ClarificationConfig, string, council.EventFunc) error
+	runFullWithClarifications func(context.Context, string, []council.ClarificationRound, string, council.EventFunc) error
+}
+
+func (m *mockStage0Runner) RunClarificationRound(ctx context.Context, query string, history []council.ClarificationRound, cfg council.ClarificationConfig, councilType string, onEvent council.EventFunc) error {
+	if m.runClarificationRound != nil {
+		return m.runClarificationRound(ctx, query, history, cfg, councilType, onEvent)
+	}
+	if onEvent != nil {
+		onEvent("stage0_done", nil)
+	}
+	return nil
+}
+
+func (m *mockStage0Runner) RunFullWithClarifications(ctx context.Context, originalQuery string, history []council.ClarificationRound, councilType string, onEvent council.EventFunc) error {
+	if m.runFullWithClarifications != nil {
+		return m.runFullWithClarifications(ctx, originalQuery, history, councilType, onEvent)
+	}
+	return nil
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // testConvID is a canonical UUID v4 used across tests.
 const testConvID = "00000000-0000-4000-8000-000000000001"
 
+// noopStage0Runner returns a stage0 runner that always emits stage0_done then
+// delegates RunFullWithClarifications to the provided runner.RunFull.
+func noopStage0Runner(runner *mockRunner) *mockStage0Runner {
+	return &mockStage0Runner{
+		runClarificationRound: func(_ context.Context, _ string, _ []council.ClarificationRound, _ council.ClarificationConfig, _ string, onEvent council.EventFunc) error {
+			if onEvent != nil {
+				onEvent("stage0_done", nil)
+			}
+			return nil
+		},
+		runFullWithClarifications: func(ctx context.Context, query string, _ []council.ClarificationRound, councilType string, onEvent council.EventFunc) error {
+			return runner.RunFull(ctx, query, councilType, onEvent)
+		},
+	}
+}
+
 // newTestHandler builds a Handler with no-op defaults and a silent logger.
+// clarification is disabled (MaxRounds=0) so existing tests are unaffected.
 func newTestHandler(storer *mockStorer, runner *mockRunner) *Handler {
-	return NewHandler(runner, storer, nil, "standard")
+	return NewHandler(runner, noopStage0Runner(runner), storer, nil, "standard", council.ClarificationConfig{})
 }
 
 // parseSSEEventTypes returns the "type" field from every SSE data line in body.

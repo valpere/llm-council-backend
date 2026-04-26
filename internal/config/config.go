@@ -21,6 +21,11 @@ type Config struct {
 	DefaultCouncilModels        []string
 	DefaultCouncilChairmanModel string
 	DefaultCouncilTemperature   float64
+
+	// Stage 0 clarification loop. ClarificationMaxRounds == 0 disables the feature.
+	ClarificationMaxRounds            int
+	ClarificationMaxTotalQuestions    int
+	ClarificationMaxQuestionsPerRound int
 }
 
 // Load reads configuration from environment variables and returns an error if
@@ -88,6 +93,36 @@ func Load() (*Config, error) {
 		llmBaseURL = raw
 	}
 
+	clarificationMaxRounds := 0
+	if raw := os.Getenv("CLARIFICATION_MAX_ROUNDS"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			clarificationMaxRounds = v
+		} else {
+			slog.Warn("CLARIFICATION_MAX_ROUNDS is invalid; using fallback value",
+				"value", raw, "error", err, "fallback", clarificationMaxRounds)
+		}
+	}
+
+	clarificationMaxTotalQuestions := 5
+	if raw := os.Getenv("CLARIFICATION_MAX_TOTAL_QUESTIONS"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			clarificationMaxTotalQuestions = v
+		} else {
+			slog.Warn("CLARIFICATION_MAX_TOTAL_QUESTIONS is invalid; using fallback value",
+				"value", raw, "error", err, "fallback", clarificationMaxTotalQuestions)
+		}
+	}
+
+	clarificationMaxQuestionsPerRound := 3
+	if raw := os.Getenv("CLARIFICATION_MAX_QUESTIONS_PER_ROUND"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			clarificationMaxQuestionsPerRound = v
+		} else {
+			slog.Warn("CLARIFICATION_MAX_QUESTIONS_PER_ROUND is invalid; using fallback value",
+				"value", raw, "error", err, "fallback", clarificationMaxQuestionsPerRound)
+		}
+	}
+
 	return &Config{
 		OpenRouterAPIKey:            apiKey,
 		LLMBaseURL:                  llmBaseURL,
@@ -97,5 +132,9 @@ func Load() (*Config, error) {
 		DefaultCouncilModels:        models,
 		DefaultCouncilChairmanModel: chairmanModel,
 		DefaultCouncilTemperature:   temperature,
+
+		ClarificationMaxRounds:            clarificationMaxRounds,
+		ClarificationMaxTotalQuestions:    clarificationMaxTotalQuestions,
+		ClarificationMaxQuestionsPerRound: clarificationMaxQuestionsPerRound,
 	}, nil
 }

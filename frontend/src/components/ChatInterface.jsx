@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Markdown from './Markdown';
 import { stripMarkdown } from '../utils';
 
+import Stage0 from './Stage0';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
@@ -11,6 +12,7 @@ import './ChatInterface.css';
 export default function ChatInterface({
   conversation,
   onSendMessage,
+  onAnswerSubmit,
   isLoading,
   sidebarOpen,
   onToggleSidebar,
@@ -99,6 +101,13 @@ export default function ChatInterface({
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
 
+                  {/* Stage 0 */}
+                  <Stage0
+                    pendingClarification={msg.pendingClarification}
+                    isLoading={msg.loading?.stage0}
+                    onSubmit={onAnswerSubmit}
+                  />
+
                   {/* Stage 1 */}
                   <Stage1
                     responses={msg.stage1}
@@ -137,17 +146,21 @@ export default function ChatInterface({
         <textarea
           ref={textareaRef}
           className="message-input"
-          placeholder="Ask a question… (Enter to send, Shift+Enter for new line)"
+          placeholder={
+            conversation.messages.at(-1)?.pendingClarification
+              ? 'Answer the questions above to continue…'
+              : 'Ask a question… (Enter to send, Shift+Enter for new line)'
+          }
           value={input}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          disabled={isLoading}
+          disabled={isLoading || !!conversation.messages.at(-1)?.pendingClarification}
           rows={1}
         />
         <button
           type="submit"
           className="send-button"
-          disabled={!input.trim() || isLoading}
+          disabled={!input.trim() || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
         >
           Send
         </button>

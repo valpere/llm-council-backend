@@ -52,6 +52,9 @@ type Storer interface {
 	SaveUserMessage(id, content string) error
 	SaveAssistantMessage(id string, msg council.AssistantMessage) error
 	SaveTitle(id, title string) error
+	SaveClarificationRound(id string, round int, questions []council.ClarificationQuestion, councilType string) error
+	UpdateClarificationAnswers(id string, round int, answers []council.ClarificationAnswer) error
+	GetLastClarificationRound(id string) (*council.ClarificationRound, error)
 }
 
 // Store is the JSON file backend. One file per conversation under dataDir.
@@ -233,6 +236,89 @@ func (s *Store) SaveAssistantMessage(id string, msg council.AssistantMessage) er
 	}
 	c.Messages = append(c.Messages, raw)
 	return s.writeConversation(c)
+}
+
+// clarificationMessage is the on-disk shape of a Stage 0 clarification round.
+// It is stored as a message in the conversation's Messages array alongside
+// user and assistant messages.
+type clarificationMessage struct {
+	Role        string                          `json:"role"` // always "clarification"
+	Round       int                             `json:"round"`
+	Questions   []council.ClarificationQuestion `json:"questions"`
+	Answers     []council.ClarificationAnswer   `json:"answers"`
+	CouncilType string                          `json:"council_type,omitempty"`
+}
+
+func (s *Store) SaveClarificationRound(id string, round int, questions []council.ClarificationQuestion, councilType string) error {
+	raw, err := json.Marshal(clarificationMessage{
+		Role:        "clarification",
+		Round:       round,
+		Questions:   questions,
+		CouncilType: councilType,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal clarification round: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, err := s.readConversation(id)
+	if err != nil {
+		return err
+	}
+	c.Messages = append(c.Messages, raw)
+	return s.writeConversation(c)
+}
+
+func (s *Store) UpdateClarificationAnswers(id string, round int, answers []council.ClarificationAnswer) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, err := s.readConversation(id)
+	if err != nil {
+		return err
+	}
+	// Find the last message with role="clarification" and matching round.
+	for i := len(c.Messages) - 1; i >= 0; i-- {
+		var cm clarificationMessage
+		if err := json.Unmarshal(c.Messages[i], &cm); err != nil {
+			continue
+		}
+		if cm.Role != "clarification" || cm.Round != round {
+			continue
+		}
+		cm.Answers = answers
+		raw, err := json.Marshal(cm)
+		if err != nil {
+			return fmt.Errorf("marshal updated clarification round: %w", err)
+		}
+		c.Messages[i] = raw
+		return s.writeConversation(c)
+	}
+	return fmt.Errorf("clarification round %d not found in conversation %s", round, id)
+}
+
+func (s *Store) GetLastClarificationRound(id string) (*council.ClarificationRound, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c, err := s.readConversation(id)
+	if err != nil {
+		return nil, err
+	}
+	for i := len(c.Messages) - 1; i >= 0; i-- {
+		var cm clarificationMessage
+		if err := json.Unmarshal(c.Messages[i], &cm); err != nil {
+			continue
+		}
+		if cm.Role != "clarification" {
+			continue
+		}
+		return &council.ClarificationRound{
+			Round:       cm.Round,
+			Questions:   cm.Questions,
+			Answers:     cm.Answers,
+			CouncilType: cm.CouncilType,
+		}, nil
+	}
+	return nil, nil // no clarification round found
 }
 
 func (s *Store) SaveTitle(id, title string) error {
