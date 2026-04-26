@@ -23,6 +23,7 @@ type mockStorer struct {
 	saveUserMessage            func(string, string) error
 	saveAssistantMessage       func(string, council.AssistantMessage) error
 	saveTitle                  func(string, string) error
+	closeConversation          func(string) error
 	saveClarificationRound     func(string, int, []council.ClarificationQuestion, string) error
 	updateClarificationAnswers func(string, int, []council.ClarificationAnswer) error
 	getLastClarificationRound  func(string) (*council.ClarificationRound, error)
@@ -61,6 +62,12 @@ func (m *mockStorer) SaveAssistantMessage(id string, msg council.AssistantMessag
 func (m *mockStorer) SaveTitle(id, title string) error {
 	if m.saveTitle != nil {
 		return m.saveTitle(id, title)
+	}
+	return nil
+}
+func (m *mockStorer) CloseConversation(id string) error {
+	if m.closeConversation != nil {
+		return m.closeConversation(id)
 	}
 	return nil
 }

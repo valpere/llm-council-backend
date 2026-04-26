@@ -3,6 +3,7 @@ package storage
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,12 +25,16 @@ func (e NotFoundError) Error() string {
 	return fmt.Sprintf("conversation not found: %s", e.ID)
 }
 
+// ErrConversationClosed is returned when a message is sent to a closed conversation.
+var ErrConversationClosed = errors.New("conversation is closed")
+
 // ConversationMeta holds lightweight metadata for list responses.
 type ConversationMeta struct {
 	ID           string    `json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
 	Title        string    `json:"title"`
 	MessageCount int       `json:"message_count"`
+	Closed       bool      `json:"closed"`
 }
 
 // Conversation is the full stored record including the message history.
@@ -40,6 +45,7 @@ type Conversation struct {
 	ID        string            `json:"id"`
 	CreatedAt time.Time         `json:"created_at"`
 	Title     string            `json:"title"`
+	Closed    bool              `json:"closed"`
 	Messages  []json.RawMessage `json:"messages"`
 }
 
@@ -52,6 +58,7 @@ type Storer interface {
 	SaveUserMessage(id, content string) error
 	SaveAssistantMessage(id string, msg council.AssistantMessage) error
 	SaveTitle(id, title string) error
+	CloseConversation(id string) error
 	SaveClarificationRound(id string, round int, questions []council.ClarificationQuestion, councilType string) error
 	UpdateClarificationAnswers(id string, round int, answers []council.ClarificationAnswer) error
 	GetLastClarificationRound(id string) (*council.ClarificationRound, error)
@@ -197,6 +204,7 @@ func (s *Store) ListConversations() ([]ConversationMeta, error) {
 			CreatedAt:    c.CreatedAt,
 			Title:        c.Title,
 			MessageCount: len(c.Messages),
+			Closed:       c.Closed,
 		})
 	}
 	sort.Slice(metas, func(i, j int) bool {
@@ -219,7 +227,21 @@ func (s *Store) SaveUserMessage(id, content string) error {
 	if err != nil {
 		return err
 	}
+	if c.Closed {
+		return ErrConversationClosed
+	}
 	c.Messages = append(c.Messages, raw)
+	return s.writeConversation(c)
+}
+
+func (s *Store) CloseConversation(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, err := s.readConversation(id)
+	if err != nil {
+		return err
+	}
+	c.Closed = true
 	return s.writeConversation(c)
 }
 

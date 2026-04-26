@@ -68,7 +68,7 @@ function App() {
         }
       }
 
-      setCurrentConversation({ ...conv, messages });
+      setCurrentConversation({ ...conv, messages, closed: conv.closed ?? false });
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
@@ -141,10 +141,14 @@ function App() {
       msg.loading.stage2 = false;
     }),
     stage3_start: () => updateLast((msg) => { msg.loading.stage3 = true; }),
-    stage3_complete: (event) => updateLast((msg) => {
-      msg.stage3 = event.data;
-      msg.loading.stage3 = false;
-    }),
+    stage3_complete: (event) => {
+      updateLast((msg) => {
+        msg.stage3 = event.data;
+        msg.loading.stage3 = false;
+      });
+      setCurrentConversation((prev) => prev ? { ...prev, closed: true } : prev);
+      loadConversations();
+    },
     title_complete: () => loadConversations(),
     complete: () => { loadConversations(); setIsLoading(false); },
     error: (event) => {
@@ -249,6 +253,7 @@ function App() {
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         onAnswerSubmit={handleAnswerSubmit}
+        isConversationClosed={!!currentConversation?.closed}
         isLoading={isLoading}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}

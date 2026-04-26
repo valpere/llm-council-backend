@@ -440,6 +440,10 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 	} else {
 		originalQuery = body.Content
 		if err := h.storage.SaveUserMessage(id, body.Content); err != nil {
+			if errors.Is(err, storage.ErrConversationClosed) {
+				h.writeError(w, http.StatusConflict, "conversation is closed")
+				return
+			}
 			if _, ok := errors.AsType[*storage.NotFoundError](err); ok {
 				h.writeError(w, http.StatusNotFound, "not found")
 				return
@@ -599,6 +603,11 @@ func (h *Handler) sendMessageStream(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("save assistant message", "id", id, "error", err)
 		sendErrorSSE("internal server error")
 		return
+	}
+
+	if err := h.storage.CloseConversation(id); err != nil {
+		h.logger.Error("close conversation", "id", id, "error", err)
+		// Do not abort — response is already committed; log and continue.
 	}
 
 	// Title generation: run in a goroutine to avoid blocking the ResponseWriter.

@@ -14,6 +14,7 @@ export default function ChatInterface({
   onSendMessage,
   onAnswerSubmit,
   isLoading,
+  isConversationClosed,
   sidebarOpen,
   onToggleSidebar,
 }) {
@@ -161,7 +162,7 @@ export default function ChatInterface({
             onClick={() => setContextExpanded((e) => !e)}
             aria-expanded={contextExpanded}
             aria-controls="context-textarea"
-            disabled={isLoading || !!conversation.messages.at(-1)?.pendingClarification}
+            disabled={isConversationClosed || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
           >
             <span className="context-toggle-chevron">{contextExpanded ? '▲' : '▼'}</span>
             Context
@@ -173,7 +174,7 @@ export default function ChatInterface({
               placeholder="Background information, constraints, or examples…"
               value={context}
               onChange={(e) => setContext(e.target.value)}
-              disabled={isLoading || !!conversation.messages.at(-1)?.pendingClarification}
+              disabled={isConversationClosed || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
               rows={3}
             />
           )}
@@ -183,20 +184,22 @@ export default function ChatInterface({
             ref={textareaRef}
             className="message-input"
             placeholder={
-              conversation.messages.at(-1)?.pendingClarification
-                ? 'Answer the questions above to continue…'
-                : 'Ask a question… (Enter to send, Shift+Enter for new line)'
+              isConversationClosed
+                ? 'This conversation has ended'
+                : conversation.messages.at(-1)?.pendingClarification
+                  ? 'Answer the questions above to continue…'
+                  : 'Ask a question… (Enter to send, Shift+Enter for new line)'
             }
             value={input}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            disabled={isLoading || !!conversation.messages.at(-1)?.pendingClarification}
+            disabled={isConversationClosed || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
             rows={1}
           />
           <button
             type="submit"
             className="send-button"
-            disabled={!input.trim() || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
+            disabled={isConversationClosed || !input.trim() || isLoading || !!conversation.messages.at(-1)?.pendingClarification}
           >
             Send
           </button>

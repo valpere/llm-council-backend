@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -401,6 +402,88 @@ func TestGetLastClarificationRound_ReturnsLast(t *testing.T) {
 	}
 	if len(got.Questions) != 1 || got.Questions[0].ID != "q2" {
 		t.Errorf("Questions: got %v, want [{q2 Second?}]", got.Questions)
+	}
+}
+
+func TestStore_SaveUserMessage_RejectsAfterClose(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+	if err := s.SaveUserMessage(c.ID, "hello"); err != nil {
+		t.Fatalf("SaveUserMessage: %v", err)
+	}
+	if err := s.CloseConversation(c.ID); err != nil {
+		t.Fatalf("CloseConversation: %v", err)
+	}
+	err = s.SaveUserMessage(c.ID, "should fail")
+	if !errors.Is(err, storage.ErrConversationClosed) {
+		t.Errorf("expected ErrConversationClosed, got %v", err)
+	}
+	// Verify the closed flag is persisted.
+	got, err := s.GetConversation(c.ID)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if !got.Closed {
+		t.Error("expected Closed=true after CloseConversation")
+	}
+}
+
+func TestStore_CloseConversation_RaceWithSaveUserMessage(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	const goroutines = 8
+	errs := make([]error, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines + 1)
+
+	// N goroutines try to save user messages concurrently.
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = s.SaveUserMessage(c.ID, "msg")
+		}(i)
+	}
+	// One goroutine closes the conversation.
+	go func() {
+		defer wg.Done()
+		if err := s.CloseConversation(c.ID); err != nil {
+			t.Errorf("CloseConversation: %v", err)
+		}
+	}()
+	wg.Wait()
+
+	// Every error must be nil (saved before close) or ErrConversationClosed.
+	for i, err := range errs {
+		if err != nil && !errors.Is(err, storage.ErrConversationClosed) {
+			t.Errorf("goroutine %d: unexpected error %v", i, err)
+		}
+	}
+
+	// Count successful saves.
+	saved := 0
+	for _, err := range errs {
+		if err == nil {
+			saved++
+		}
+	}
+
+	// File must parse as valid JSON with a consistent message count.
+	got, err := s.GetConversation(c.ID)
+	if err != nil {
+		t.Fatalf("GetConversation after race: %v", err)
+	}
+	if len(got.Messages) != saved {
+		t.Errorf("message count mismatch: file has %d, expected %d (successful saves)", len(got.Messages), saved)
+	}
+	if !got.Closed {
+		t.Error("expected Closed=true after CloseConversation")
 	}
 }
 
