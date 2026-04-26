@@ -274,6 +274,136 @@ func TestInvalidUUIDReturnNotFound(t *testing.T) {
 	}
 }
 
+// ── Clarification storage ─────────────────────────────────────────────────────
+
+func TestSaveClarificationRound(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	questions := []council.ClarificationQuestion{
+		{ID: "q1", Text: "What is the target audience?"},
+		{ID: "q2", Text: "What is the time constraint?"},
+	}
+	if err := s.SaveClarificationRound(c.ID, 1, questions, "default"); err != nil {
+		t.Fatalf("SaveClarificationRound: %v", err)
+	}
+
+	got, err := s.GetConversation(c.ID)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if len(got.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(got.Messages))
+	}
+
+	var raw struct {
+		Role        string                          `json:"role"`
+		Round       int                             `json:"round"`
+		Questions   []council.ClarificationQuestion `json:"questions"`
+		CouncilType string                          `json:"council_type"`
+	}
+	if err := json.Unmarshal(got.Messages[0], &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if raw.Role != "clarification" {
+		t.Errorf("Role: got %q, want %q", raw.Role, "clarification")
+	}
+	if raw.Round != 1 {
+		t.Errorf("Round: got %d, want 1", raw.Round)
+	}
+	if len(raw.Questions) != 2 {
+		t.Errorf("Questions len: got %d, want 2", len(raw.Questions))
+	}
+	if raw.CouncilType != "default" {
+		t.Errorf("CouncilType: got %q, want %q", raw.CouncilType, "default")
+	}
+}
+
+func TestUpdateClarificationAnswers(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	questions := []council.ClarificationQuestion{
+		{ID: "q1", Text: "What format?"},
+	}
+	if err := s.SaveClarificationRound(c.ID, 1, questions, "default"); err != nil {
+		t.Fatalf("SaveClarificationRound: %v", err)
+	}
+
+	answers := []council.ClarificationAnswer{
+		{ID: "q1", Text: "Markdown"},
+	}
+	if err := s.UpdateClarificationAnswers(c.ID, 1, answers); err != nil {
+		t.Fatalf("UpdateClarificationAnswers: %v", err)
+	}
+
+	got, err := s.GetConversation(c.ID)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	var raw struct {
+		Answers []council.ClarificationAnswer `json:"answers"`
+	}
+	if err := json.Unmarshal(got.Messages[0], &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(raw.Answers) != 1 || raw.Answers[0].Text != "Markdown" {
+		t.Errorf("Answers: got %v, want [{q1 Markdown}]", raw.Answers)
+	}
+}
+
+func TestGetLastClarificationRound_NoRound(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	got, err := s.GetLastClarificationRound(c.ID)
+	if err != nil {
+		t.Fatalf("GetLastClarificationRound: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil when no clarification round, got %+v", got)
+	}
+}
+
+func TestGetLastClarificationRound_ReturnsLast(t *testing.T) {
+	s := newTestStore(t)
+	c, err := s.CreateConversation()
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	// Save two rounds.
+	if err := s.SaveClarificationRound(c.ID, 1, []council.ClarificationQuestion{{ID: "q1", Text: "First?"}}, "default"); err != nil {
+		t.Fatalf("SaveClarificationRound round 1: %v", err)
+	}
+	if err := s.SaveClarificationRound(c.ID, 2, []council.ClarificationQuestion{{ID: "q2", Text: "Second?"}}, "default"); err != nil {
+		t.Fatalf("SaveClarificationRound round 2: %v", err)
+	}
+
+	got, err := s.GetLastClarificationRound(c.ID)
+	if err != nil {
+		t.Fatalf("GetLastClarificationRound: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil round, got nil")
+	}
+	if got.Round != 2 {
+		t.Errorf("Round: got %d, want 2", got.Round)
+	}
+	if len(got.Questions) != 1 || got.Questions[0].ID != "q2" {
+		t.Errorf("Questions: got %v, want [{q2 Second?}]", got.Questions)
+	}
+}
+
 func TestCorruptFileSkippedInList(t *testing.T) {
 	dir := t.TempDir()
 	s, err := storage.NewStore(dir, slog.Default())

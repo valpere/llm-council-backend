@@ -32,14 +32,42 @@ function App() {
   const loadConversation = async (id) => {
     try {
       const conv = await api.getConversation(id);
-      const messages = (conv.messages ?? []).map((msg) => {
-        if (msg.role !== 'assistant') return msg;
-        return {
-          loading: { stage1: false, stage2: false, stage3: false },
-          error: null,
-          ...msg,
-        };
-      });
+      let pendingClarification = null;
+
+      const messages = (conv.messages ?? [])
+        .filter((msg) => {
+          if (msg.role !== 'clarification') return true;
+          const isPending =
+            !msg.answers || msg.answers.length === 0 ||
+            msg.answers.every((a) => !a.text);
+          if (isPending) pendingClarification = { round: msg.round, questions: msg.questions };
+          return false;
+        })
+        .map((msg) => {
+          if (msg.role !== 'assistant') return msg;
+          return {
+            loading: { stage0: false, stage1: false, stage2: false, stage3: false },
+            error: null,
+            pendingClarification: null,
+            ...msg,
+          };
+        });
+
+      if (pendingClarification) {
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg?.role === 'assistant') {
+          lastMsg.pendingClarification = pendingClarification;
+        } else {
+          messages.push({
+            role: 'assistant',
+            stage1: null, stage2: null, stage3: null, metadata: null,
+            loading: { stage0: false, stage1: false, stage2: false, stage3: false },
+            error: null,
+            pendingClarification,
+          });
+        }
+      }
+
       setCurrentConversation({ ...conv, messages });
     } catch (error) {
       console.error('Failed to load conversation:', error);
@@ -86,34 +114,67 @@ function App() {
     setCurrentConversationId(id);
   };
 
+  // Returns the SSE event handlers for an active stream, sharing updateLast.
+  const makeStreamHandlers = (updateLast) => ({
+    stage0_round_complete: (event) => {
+      updateLast((msg) => {
+        msg.pendingClarification = { round: event.data.round, questions: event.data.questions };
+        msg.loading.stage0 = false;
+        msg.loading.stage1 = false;
+      });
+      setIsLoading(false);
+    },
+    stage0_done: () => updateLast((msg) => {
+      msg.pendingClarification = null;
+      msg.loading.stage0 = false;
+      msg.loading.stage1 = true;
+    }),
+    stage1_start: () => updateLast((msg) => { msg.loading.stage1 = true; }),
+    stage1_complete: (event) => updateLast((msg) => {
+      msg.stage1 = event.data;
+      msg.loading.stage1 = false;
+    }),
+    stage2_start: () => updateLast((msg) => { msg.loading.stage2 = true; }),
+    stage2_complete: (event) => updateLast((msg) => {
+      msg.stage2 = event.data;
+      msg.metadata = event.metadata;
+      msg.loading.stage2 = false;
+    }),
+    stage3_start: () => updateLast((msg) => { msg.loading.stage3 = true; }),
+    stage3_complete: (event) => updateLast((msg) => {
+      msg.stage3 = event.data;
+      msg.loading.stage3 = false;
+    }),
+    title_complete: () => loadConversations(),
+    complete: () => { loadConversations(); setIsLoading(false); },
+    error: (event) => {
+      updateLast((msg) => {
+        msg.error = event.message;
+        msg.loading = { stage0: false, stage1: false, stage2: false, stage3: false };
+      });
+      setIsLoading(false);
+    },
+  });
+
   const handleSendMessage = async (content) => {
     if (!currentConversationId) return;
 
     setIsLoading(true);
     try {
-      // Optimistically add user message to UI
       const userMessage = { role: 'user', content };
       setCurrentConversation((prev) => ({
         ...prev,
         messages: [...prev.messages, userMessage],
       }));
 
-      // Create a partial assistant message that will be updated progressively
       const assistantMessage = {
         role: 'assistant',
-        stage1: null,
-        stage2: null,
-        stage3: null,
-        metadata: null,
-        loading: {
-          stage1: true,
-          stage2: false,
-          stage3: false,
-        },
+        stage1: null, stage2: null, stage3: null, metadata: null,
+        loading: { stage0: false, stage1: true, stage2: false, stage3: false },
         error: null,
+        pendingClarification: null,
       };
 
-      // Add the partial assistant message
       setCurrentConversation((prev) => ({
         ...prev,
         messages: [...prev.messages, assistantMessage],
@@ -126,51 +187,48 @@ function App() {
           return { ...prev, messages };
         });
 
-      const sseHandlers = {
-        stage1_start: () => updateLast((msg) => { msg.loading.stage1 = true; }),
-        stage1_complete: (event) => updateLast((msg) => {
-          msg.stage1 = event.data;
-          msg.loading.stage1 = false;
-        }),
-        stage2_start: () => updateLast((msg) => { msg.loading.stage2 = true; }),
-        stage2_complete: (event) => updateLast((msg) => {
-          msg.stage2 = event.data;
-          msg.metadata = event.metadata;
-          msg.loading.stage2 = false;
-        }),
-        stage3_start: () => updateLast((msg) => { msg.loading.stage3 = true; }),
-        stage3_complete: (event) => updateLast((msg) => {
-          msg.stage3 = event.data;
-          msg.loading.stage3 = false;
-        }),
-        title_complete: () => loadConversations(),
-        complete: () => { loadConversations(); setIsLoading(false); },
-        error: (event) => {
-          updateLast((msg) => {
-            msg.error = event.message;
-            msg.loading.stage1 = false;
-            msg.loading.stage2 = false;
-            msg.loading.stage3 = false;
-          });
-          setIsLoading(false);
-        },
-      };
-
-      // Send message with streaming
-      await api.sendMessageStream(currentConversationId, content, 'default', (eventType, event) => {
-        if (Object.hasOwn(sseHandlers, eventType)) {
-          sseHandlers[eventType](event);
-        } else {
-          console.log('Unknown event type:', eventType);
-        }
-      });
+      const handlers = makeStreamHandlers(updateLast);
+      await api.sendMessageStream(
+        currentConversationId,
+        { content, council_type: 'default' },
+        (eventType, event) => handlers[eventType]?.(event)
+      );
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,
         messages: prev.messages.slice(0, -2),
       }));
+      setIsLoading(false);
+    }
+  };
+
+  const handleAnswerSubmit = async (answers) => {
+    if (!currentConversationId) return;
+
+    setIsLoading(true);
+
+    const updateLast = (updater) =>
+      setCurrentConversation((prev) => {
+        const messages = [...prev.messages];
+        updater(messages[messages.length - 1]);
+        return { ...prev, messages };
+      });
+
+    updateLast((msg) => {
+      msg.pendingClarification = null;
+      msg.loading.stage1 = true;
+    });
+
+    try {
+      const handlers = makeStreamHandlers(updateLast);
+      await api.sendMessageStream(
+        currentConversationId,
+        { answers },
+        (eventType, event) => handlers[eventType]?.(event)
+      );
+    } catch (error) {
+      console.error('Failed to submit answers:', error);
       setIsLoading(false);
     }
   };
@@ -190,6 +248,7 @@ function App() {
       <ChatInterface
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
+        onAnswerSubmit={handleAnswerSubmit}
         isLoading={isLoading}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}

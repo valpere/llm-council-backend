@@ -58,6 +58,8 @@ is written), so a proper HTTP status code is always possible.
 | Council quorum not met | `503` | `"council quorum not met"` |
 | Storage failure (pre-pipeline) | `500` | `"internal server error"` |
 | SSE streaming not supported by server | `500` | `"streaming not supported"` |
+| *(planned — issue #154)* Round-N with already-answered round | `409` | `"clarification round already answered"` |
+| *(planned — issue #154)* Round-N with no pending clarification round | `409` | `"no pending clarification round"` |
 
 ### SSE error events
 
@@ -202,6 +204,13 @@ Send a message and receive the full deliberation result in a single JSON respons
 | `content` | string | yes | The user's message |
 | `council_type` | string | no | Council strategy name; defaults to `DEFAULT_COUNCIL_TYPE` env var |
 
+> **Planned (issue #154):** When Stage 0 clarification is enabled, the request body is XOR — supply exactly one of `content` (round 1) or `answers` (round 2+). Both present, or neither, returns `400`. The `council_type` for round 2+ is loaded from storage; do not re-send it.
+>
+> ```json
+> // Round 2+ (answering clarification questions)
+> { "answers": [ {"id": "q1", "text": "MySQL 5.7"}, {"id": "q2", "text": ""} ] }
+> ```
+
 **Response `200 OK`** — `AssistantMessage`
 
 ```json
@@ -273,12 +282,20 @@ There is no `event:` line — demux by the `"type"` field of the JSON payload.
 ## SSE event sequence
 
 ```
+← planned ──────────────────────────────────────────────────────────────
+data: {"type":"stage0_round_complete","data":{"round":1,"questions":[...]}}   ← stream closes here
+  … client submits answers via new POST …
+data: {"type":"stage0_done"}                                                  ← Stage 1 follows
+─────────────────────────────────────────────────────────────────── planned →
+
 data: {"type":"stage1_complete","data":[...StageOneResult]}
 data: {"type":"stage2_complete","data":[...StageTwoResult],"metadata":{...Metadata}}
 data: {"type":"stage3_complete","data":{...StageThreeResult}}
 data: {"type":"title_complete","data":{"title":"..."}}     ← may be absent if title generation times out
 data: {"type":"complete"}
 ```
+
+When Stage 0 is disabled (`CLARIFICATION_MAX_ROUNDS=0`, the default), no `stage0_*` events are emitted and the sequence is unchanged.
 
 On failure at any point:
 
@@ -287,6 +304,31 @@ data: {"type":"error","message":"human-readable message"}
 ```
 
 After an error event the stream ends. No `complete` event follows.
+
+### `stage0_round_complete` *(planned — issue #154)*
+
+Emitted when the chairman has questions for the user. The SSE stream **closes** after this event. The client must open a new stream with `{answers:[...]}` to continue.
+
+```json
+{
+  "type": "stage0_round_complete",
+  "data": {
+    "round": 1,
+    "questions": [
+      {"id": "q1", "text": "What database are you currently using and at what scale?"},
+      {"id": "q2", "text": "What is prompting this migration?"}
+    ]
+  }
+}
+```
+
+### `stage0_done` *(planned — issue #154)*
+
+Emitted when the Stage 0 loop ends — chairman said "enough", limits were reached, or the user submitted all-empty answers. `stage1_complete` follows immediately on the same stream.
+
+```json
+{ "type": "stage0_done" }
+```
 
 ### `stage1_complete`
 
@@ -441,3 +483,10 @@ Emitted when the pipeline fails. Stream ends after this event.
 | Field | Type | Description |
 |-------|------|-------------|
 | `title` | string | First 50 bytes of the Stage 3 response, used as the conversation title |
+
+### `ClarificationQuestion` *(planned — issue #154)*
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Stable identifier (e.g. `"q1"`) — use this as the `id` in answer submissions |
+| `text` | string | Question text from the chairman (rendered via `react-markdown` in the UI) |

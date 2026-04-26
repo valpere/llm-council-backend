@@ -54,7 +54,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.NewHandler(runner, store, logger, cfg.DefaultCouncilType)
+	clarificationCfg := council.ClarificationConfig{
+		MaxRounds:            cfg.ClarificationMaxRounds,
+		MaxTotalQuestions:    cfg.ClarificationMaxTotalQuestions,
+		MaxQuestionsPerRound: cfg.ClarificationMaxQuestionsPerRound,
+	}
+	handler := api.NewHandler(runner, runner, store, logger, cfg.DefaultCouncilType, clarificationCfg)
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 

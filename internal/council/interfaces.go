@@ -15,3 +15,28 @@ type LLMClient interface {
 type Runner interface {
 	RunFull(ctx context.Context, query string, councilType string, onEvent EventFunc) error
 }
+
+// Stage0Runner orchestrates a single clarification round.
+// Results are delivered via onEvent only — no stage structs are returned directly.
+// Emits one of:
+//
+//	"stage0_round_complete" — chairman has questions; stream should close
+//	"stage0_done"           — loop should terminate; Stage 1/2/3 can proceed
+type Stage0Runner interface {
+	RunClarificationRound(
+		ctx context.Context,
+		query string,
+		history []ClarificationRound,
+		cfg ClarificationConfig,
+		councilType string,
+		onEvent EventFunc,
+	) error
+
+	RunFullWithClarifications(
+		ctx context.Context,
+		originalQuery string,
+		history []ClarificationRound,
+		councilType string,
+		onEvent EventFunc,
+	) error
+}
