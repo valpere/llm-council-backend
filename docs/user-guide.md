@@ -22,7 +22,7 @@ LLM Council is a backend API that runs a **3-stage multi-model deliberation pipe
 
 ### Prerequisites
 
-- Go 1.25 or later
+- Go 1.26 or later
 - An [OpenRouter](https://openrouter.ai) API key with credits
 
 ### Setup
@@ -50,19 +50,18 @@ All configuration is via environment variables. The server reads from `.env` at 
 |----------|---------|-------------|
 | `OPENROUTER_API_KEY` | *(required)* | Your OpenRouter API key. The server refuses to start if this is not set. |
 | `COUNCIL_MODELS` | See below | Comma-separated list of model IDs to use as council members. |
-| `CHAIRMAN_MODEL` | `google/gemini-3-pro-preview` | Model that synthesizes the final answer in Stage 3. |
-| `TITLE_MODEL` | `google/gemini-2.5-flash` | Model used to auto-generate conversation titles. |
+| `CHAIRMAN_MODEL` | `openai/gpt-4o-mini` | Model that synthesizes the final answer in Stage 3. |
+| `DEFAULT_COUNCIL_TEMPERATURE` | `0.7` | Sampling temperature for council and chairman calls. |
 | `PORT` | `8001` | TCP port the HTTP server listens on. |
 | `DATA_DIR` | `data/conversations` | Directory where conversation JSON files are stored. Relative to the working directory. |
-| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Comma-separated list of allowed CORS origins. Set this to your frontend URL in production. |
+| `LLM_API_BASE_URL` | *(optional)* | Override the OpenRouter API base URL. Must be an absolute `http`/`https` URL. Useful for pointing at a compatible local proxy. |
 
 ### Default council models
 
 ```
-openai/gpt-5.1
-google/gemini-3-pro-preview
-anthropic/claude-sonnet-4.5
-x-ai/grok-4
+openai/gpt-4o-mini
+anthropic/claude-haiku-4-5
+google/gemini-flash-1.5
 ```
 
 ### Custom council example
@@ -196,7 +195,8 @@ All error responses use the same shape:
 |--------|------|
 | `400` | Malformed JSON body or request too large (> 1 MB) |
 | `404` | Conversation not found |
-| `500` | Internal error (storage failure, all models failed) |
+| `503` | Council quorum not met (too many models failed) |
+| `500` | Internal error (storage failure) |
 
 ---
 
@@ -209,18 +209,17 @@ The streaming endpoint emits [Server-Sent Events](https://developer.mozilla.org/
 ```
 → POST /api/conversations/{id}/message/stream
 
-← data: {"type":"stage1_start"}
 ← data: {"type":"stage1_complete","data":[...]}
 
-← data: {"type":"stage2_start"}
 ← data: {"type":"stage2_complete","data":[...],"metadata":{...}}
 
-← data: {"type":"stage3_start"}
 ← data: {"type":"stage3_complete","data":{...}}
 
-← data: {"type":"title_complete","data":{"title":"..."}}   ← first message only
+← data: {"type":"title_complete","data":{"title":"..."}}   ← first message only; may be absent
 ← data: {"type":"complete"}
 ```
+
+There are no `*_start` events — the client receives each stage result only when it is fully complete.
 
 ### Event payloads
 
@@ -230,13 +229,14 @@ The streaming endpoint emits [Server-Sent Events](https://developer.mozilla.org/
 {
   "type": "stage1_complete",
   "data": [
-    { "model": "openai/gpt-5.1",        "response": "The Fermi paradox is..." },
-    { "model": "google/gemini-3-pro-preview", "response": "Named after Enrico Fermi..." },
-    { "model": "anthropic/claude-sonnet-4.5", "response": "..." },
-    { "model": "x-ai/grok-4",           "response": "..." }
+    { "label": "Response A", "content": "The Fermi paradox is...", "model": "openai/gpt-4o-mini", "duration_ms": 1240 },
+    { "label": "Response B", "content": "Named after Enrico Fermi...", "model": "anthropic/claude-haiku-4-5", "duration_ms": 980 },
+    { "label": "Response C", "content": "...", "model": "google/gemini-flash-1.5", "duration_ms": 1100 }
   ]
 }
 ```
+
+Labels (`Response A`, `Response B`, …) are randomly assigned per request — the same model will get a different label on each run.
 
 #### `stage2_complete`
 
@@ -244,20 +244,27 @@ The streaming endpoint emits [Server-Sent Events](https://developer.mozilla.org/
 {
   "type": "stage2_complete",
   "data": [
-    { "model": "openai/gpt-5.1", "ranking": "1. Response C\n2. Response A\n...", "parsed_ranking": ["C","A","B","D"] }
+    { "reviewer_label": "Response A", "rankings": ["Response C", "Response B", "Response A"] },
+    { "reviewer_label": "Response B", "rankings": ["Response C", "Response A", "Response B"] }
   ],
   "metadata": {
-    "label_to_model": { "A": "openai/gpt-5.1", "B": "google/gemini-3-pro-preview", "C": "anthropic/claude-sonnet-4.5", "D": "x-ai/grok-4" },
+    "council_type": "default",
+    "label_to_model": {
+      "Response A": "openai/gpt-4o-mini",
+      "Response B": "anthropic/claude-haiku-4-5",
+      "Response C": "google/gemini-flash-1.5"
+    },
     "aggregate_rankings": [
-      { "model": "anthropic/claude-sonnet-4.5", "average_rank": 1.75, "rankings_count": 4 },
-      { "model": "openai/gpt-5.1",              "average_rank": 2.25, "rankings_count": 4 }
+      { "model": "google/gemini-flash-1.5", "score": 1.0 },
+      { "model": "anthropic/claude-haiku-4-5", "score": 1.5 },
+      { "model": "openai/gpt-4o-mini", "score": 2.5 }
     ],
     "consensus_w": 0.72
   }
 }
 ```
 
-`aggregate_rankings` is sorted ascending by `average_rank` (rank 1 = best). `consensus_w` is Kendall's W coefficient (0–1): ≥ 0.7 indicates strong agreement among reviewers on which responses are best.
+`aggregate_rankings` is sorted ascending by `score` (lower = ranked higher). `consensus_w` is Kendall's W coefficient (0–1): ≥ 0.7 indicates strong agreement among reviewers.
 
 #### `stage3_complete`
 
@@ -265,8 +272,9 @@ The streaming endpoint emits [Server-Sent Events](https://developer.mozilla.org/
 {
   "type": "stage3_complete",
   "data": {
-    "model": "google/gemini-3-pro-preview",
-    "response": "The Fermi paradox, named after physicist Enrico Fermi, asks..."
+    "content": "The Fermi paradox, named after physicist Enrico Fermi, asks...",
+    "model": "openai/gpt-4o-mini",
+    "duration_ms": 890
   }
 }
 ```
@@ -274,22 +282,22 @@ The streaming endpoint emits [Server-Sent Events](https://developer.mozilla.org/
 #### `title_complete` *(first message in a conversation only)*
 
 ```json
-{ "type": "title_complete", "data": { "title": "Fermi Paradox Explained" } }
+{ "type": "title_complete", "data": { "title": "The Fermi paradox, named after phys" } }
 ```
+
+The title is the first 50 bytes of the Stage 3 response. It may be absent if generation does not complete within the 30-second deadline.
 
 #### `error`
 
 ```json
-{ "type": "error", "message": "All models failed to respond. Please try again." }
+{ "type": "error", "message": "council quorum not met" }
 ```
 
-An `error` event means the pipeline failed mid-stream. The connection remains open until `complete` or an error terminates it.
+An `error` event means the pipeline failed mid-stream. The stream ends immediately after this event — no `complete` event follows.
 
 ### Consuming SSE in JavaScript
 
 ```js
-const es = new EventSource(''); // not applicable for POST — use fetch
-
 const response = await fetch(`/api/conversations/${id}/message/stream`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -311,7 +319,7 @@ while (true) {
     const event = JSON.parse(line.slice(6));
     switch (event.type) {
       case 'stage1_complete': console.log('Stage 1:', event.data); break;
-      case 'stage3_complete': console.log('Final:', event.data.response); break;
+      case 'stage3_complete': console.log('Final:', event.data.content); break;
       case 'complete':        console.log('Done'); break;
     }
   }
@@ -326,22 +334,25 @@ Both `/message` and `/message/stream` (after `complete`) represent the same data
 
 ```json
 {
+  "role": "assistant",
   "stage1": [
-    { "model": "openai/gpt-5.1", "response": "..." },
+    { "label": "Response A", "content": "...", "model": "openai/gpt-4o-mini", "duration_ms": 1240 },
     ...
   ],
   "stage2": [
-    { "model": "openai/gpt-5.1", "ranking": "1. Response C...", "parsed_ranking": ["C","A","B","D"] },
+    { "reviewer_label": "Response B", "rankings": ["Response A", "Response C", "Response B"] },
     ...
   ],
   "stage3": {
-    "model": "google/gemini-3-pro-preview",
-    "response": "..."
+    "content": "...",
+    "model": "openai/gpt-4o-mini",
+    "duration_ms": 890
   },
   "metadata": {
-    "label_to_model": { "A": "openai/gpt-5.1", ... },
+    "council_type": "default",
+    "label_to_model": { "Response A": "openai/gpt-4o-mini", ... },
     "aggregate_rankings": [
-      { "model": "...", "average_rank": 1.75, "rankings_count": 4 }
+      { "model": "openai/gpt-4o-mini", "score": 1.5 }
     ],
     "consensus_w": 0.72
   }
@@ -362,7 +373,7 @@ The Chairman model receives the consensus level as part of its synthesis prompt 
 
 ### Aggregate rankings
 
-`metadata.aggregate_rankings` lists models sorted by average rank across all reviewers (lower = better). Use this to see which model the council collectively preferred for this query.
+`metadata.aggregate_rankings` lists models sorted by aggregate score across all reviewers (lower = better). Use this to see which model the council collectively preferred for this query.
 
 ---
 
@@ -370,18 +381,15 @@ The Chairman model receives the consensus level as part of its synthesis prompt 
 
 | Endpoint | Status | When |
 |----------|--------|------|
-| `GET /` | `200` | Always — legacy compatibility check |
 | `GET /health/live` | `200` | Always — process is alive |
-| `GET /health/ready` | `200` or `503` | 200 when data directory is accessible; 503 otherwise |
+| `GET /health/ready` | `200` | Always — empty body |
 
 Use `/health/live` for liveness probes and `/health/ready` for readiness probes in container orchestration.
 
 ```bash
-curl http://localhost:8001/health/ready
-# {"status":"ok"}
+curl http://localhost:8001/health/live
+# 200 OK (empty body)
 ```
-
-A `503` from `/health/ready` means the data directory is unavailable. Check `DATA_DIR` permissions.
 
 ---
 
@@ -416,11 +424,12 @@ The directory is created automatically on first use with permissions `0700`.
 
 ### CORS
 
-The server allows cross-origin requests from origins listed in `CORS_ORIGINS`. For production, set this explicitly:
+The server allows cross-origin requests from these hardcoded origins:
 
-```bash
-CORS_ORIGINS="https://your-frontend.example.com" go run ./cmd/server
-```
+- `http://localhost:5173` (Vite dev server)
+- `http://localhost:3000`
+
+CORS origins are not configurable via environment variable. For production deployments on a different origin, modify `allowedOrigins` in `internal/api/handler.go`.
 
 Preflight `OPTIONS` requests are handled automatically.
 
@@ -430,11 +439,11 @@ Request bodies are limited to **1 MB**. Requests exceeding this return `400 Bad 
 
 ### Model timeouts
 
-Each individual model query has a **120-second timeout**. If a model does not respond within 120 seconds, it is skipped and the pipeline continues with successful responses. The overall request does not fail unless all models time out.
+Each individual model query has a **120-second timeout**. If a model does not respond within 120 seconds, it is skipped and the pipeline continues with successful responses. The overall request does not fail unless the quorum minimum is not met.
 
 ### Title generation
 
-Conversation titles are generated asynchronously after the first message using `TITLE_MODEL`. Title generation runs in the background with a 30-second timeout and does not block the response. If title generation fails, the conversation retains the title `"New Conversation"`.
+After every response, the server truncates the Stage 3 content to 50 runes, saves it as the conversation title, and emits a `title_complete` SSE event before `complete`. The derivation is an in-memory string operation, so the 30-second fallback timeout is effectively unreachable in practice.
 
 ### Structured logs
 

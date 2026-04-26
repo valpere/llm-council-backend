@@ -1,7 +1,8 @@
 ---
 name: code-simplifier
 description: "Use this agent when you need to refactor recently written or modified code to reduce complexity, improve readability, and remove redundancy while preserving identical behavior. This agent is ideal after writing a new function or module, during code review, or when complexity metrics are exceeded.\\n\\n<example>\\nContext: The user has just written a new Go function with nested conditionals and asks for it to be simplified.\\nuser: \"I just wrote this function to check if a user can make a purchase, can you review it?\"\\nassistant: \"I'll use the code-simplifier agent to analyze and simplify this function for you.\"\\n<commentary>\\nSince the user has recently written code and is asking for a review/simplification, launch the code-simplifier agent to analyze and refactor it.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user has written a data processing function with an index-based loop and unnecessary intermediate variables.\\nuser: \"Here's my new GetActiveUsers function\"\\nassistant: \"Let me launch the code-simplifier agent to check this for simplification opportunities.\"\\n<commentary>\\nA new function has been presented — proactively use the code-simplifier agent to identify and apply simplifications.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user asks for a large function to be broken down.\\nuser: \"This ProcessOrder function is getting hard to read, can you clean it up?\"\\nassistant: \"I'll invoke the code-simplifier agent to decompose and simplify this function.\"\\n<commentary>\\nThe user is explicitly requesting simplification — use the code-simplifier agent to handle the refactoring.\\n</commentary>\\n</example>"
-model: sonnet
+tools: Bash, Glob, Grep, Read, Edit, Write
+model: haiku
 color: cyan
 memory: project
 ---
@@ -323,3 +324,15 @@ Memory is one of several persistence mechanisms available to you as you assist t
 ## MEMORY.md
 
 Your MEMORY.md is currently empty. When you save new memories, they will appear here.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "deepseek/deepseek-v3.2" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

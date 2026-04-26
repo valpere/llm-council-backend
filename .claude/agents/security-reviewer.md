@@ -1,8 +1,8 @@
 ---
 name: security-reviewer
 description: Use when new code has been written or modified and needs a security audit before a PR is created. Analyzes source code for OWASP Top 10 vulnerabilities, XSS risks, injection vectors, hardcoded secrets, and insecure patterns. Report-only — never modifies code. Invoke proactively after implementing features that handle user input, render LLM output, or make API calls.
-tools: Glob, Grep, Read
-model: sonnet
+tools: Bash, Glob, Grep, Read
+model: haiku
 color: blue
 ---
 
@@ -129,3 +129,15 @@ Build up knowledge across conversations — save when you discover recurring vul
 **How:** write `<topic>.md` to `.claude/agent-memory/security-reviewer/` with frontmatter (`name`, `description`, `type`), then add a one-line pointer to `.claude/agent-memory/security-reviewer/MEMORY.md`. Never write memory content directly into MEMORY.md. Create MEMORY.md when saving your first memory.
 
 **When to read:** check MEMORY.md when the user references prior work or explicitly asks you to recall.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "deepseek/deepseek-v3.2" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

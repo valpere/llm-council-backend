@@ -2,7 +2,7 @@
 name: ci-build-agent
 description: Use when a GitHub Actions workflow must be created or modified, a CI pipeline fails due to workflow configuration, or deployment automation needs to be added or updated. Covers both Go backend CI (make lint, make test) and frontend CI (npm run lint, npm run build). Do NOT use for application code fixes, ESLint errors in source files, or dependency modifications — those belong to static-analysis or bug-fixer.
 tools: Glob, Grep, Read, Bash, Write, Edit, WebFetch
-model: sonnet
+model: haiku
 color: lime
 ---
 

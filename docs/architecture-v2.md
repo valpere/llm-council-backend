@@ -1,7 +1,6 @@
 # LLM Council — Architecture (v2)
 
-> The archived v1 implementation is described in `docs/architecture.md`.
-> This document reflects the current v2 codebase.
+> This document reflects the current v2 codebase. The v1 implementation is preserved on `archive/v1`.
 
 ---
 

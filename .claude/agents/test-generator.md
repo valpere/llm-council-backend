@@ -2,7 +2,7 @@
 name: test-generator
 description: "Use this agent when new Go source code (handlers, council logic, storage, or utility functions) has been written or modified and needs a corresponding test file generated or updated. Acts as the quality gate between code generation and PR review.\n\n<example>\nContext: A new handler method was added.\nuser: \"I've added a new endpoint to handler.go. Can you write the tests?\"\nassistant: \"I'll use the test-generator agent to produce a table-driven test for the new endpoint.\"\n<commentary>\nA new handler was written. Use the test-generator agent to produce tests following all project mock and table-driven conventions.\n</commentary>\n</example>\n\n<example>\nContext: A utility function in council.go was modified.\nuser: \"Fixed an edge case in CalculateAggregateRankings where a single ranker panicked.\"\nassistant: \"I'll launch the test-generator agent to write tests covering the fixed edge case.\"\n<commentary>\nA utility function was patched. Use the test-generator to produce regression coverage.\n</commentary>\n</example>"
 tools: Glob, Grep, Read, Bash, Write, Edit
-model: sonnet
+model: haiku
 color: orange
 memory: project
 ---
@@ -209,3 +209,15 @@ Then add a pointer to `.claude/agent-memory/MEMORY.md`.
 ## MEMORY.md
 
 Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior findings.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "qwen/qwen3-coder-next" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

@@ -11,11 +11,9 @@ anonymously peer-review each other, and a Chairman model synthesizes a final ans
 is in progress starting from the research documents below.
 
 See `docs/` for the current source of truth:
-- `docs/council-research-synthesis.md` — aggregated design research (strategies, LCCP state machine, Go patterns, production considerations)
-- `docs/council-research-gaps.md` — design decisions and open questions to resolve before building
+- `docs/council-research-synthesis.md` — aggregated design research (strategies, LCCP state machine, Go patterns, production considerations) + implementation design decisions and open questions
 
-The following docs describe the **archived v1** implementation and are retained for reference only:
-- `docs/architecture.md`, `docs/council-stages.md`, `docs/go-implementation.md`, `docs/user-guide.md`
+The v1 implementation is archived on `archive/v1`. Its docs have been removed from `docs/`.
 
 ## Stack (planned for v2)
 

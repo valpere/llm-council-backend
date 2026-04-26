@@ -2,7 +2,7 @@
 name: static-analysis
 description: "Use this agent when CI reports lint failures, a pull request fails vet or staticcheck, or after code generation produces new files. Runs `make lint` (go vet + staticcheck), classifies violations, and applies safe cosmetic fixes. Do NOT invoke when runtime bugs must be fixed, architecture refactors are required, or interface logic must be redesigned.\n\n<example>\nContext: The user has just run code generation and wants lint to pass before creating a PR.\nuser: \"I just generated new council methods. Can you make sure lint passes?\"\nassistant: \"I'll use the static-analysis agent to run the linter, classify violations, and apply safe cosmetic fixes.\"\n<commentary>\nAfter code generation, lint violations are common. Use the static-analysis agent to safely clean up cosmetic issues without touching runtime behavior.\n</commentary>\n</example>\n\n<example>\nContext: A developer is about to open a PR and CI is failing on lint.\nuser: \"My PR is blocked because staticcheck is failing.\"\nassistant: \"Let me launch the static-analysis agent to analyze and fix the lint violations.\"\n<commentary>\nLint failures blocking a PR are the primary trigger for the static-analysis agent.\n</commentary>\n</example>"
 tools: Glob, Grep, Read, Bash, Edit
-model: sonnet
+model: haiku
 color: white
 memory: project
 ---
@@ -189,3 +189,15 @@ Then add a pointer to `.claude/agent-memory/MEMORY.md`.
 ## MEMORY.md
 
 Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior findings.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "google/gemini-2.5-flash-lite" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

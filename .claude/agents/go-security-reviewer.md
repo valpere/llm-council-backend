@@ -1,7 +1,8 @@
 ---
-name: security-reviewer
+name: go-security-reviewer
 description: "Use this agent when you need to analyze Go or JavaScript/React source code, configuration files, or dependency manifests for security vulnerabilities, insecure coding practices, hardcoded secrets, dangerous API usage, or configuration risks. Invoke it after writing new Go code, before merging a pull request, when reviewing authentication/authorization logic, when adding new dependencies, or when modifying configuration files like Dockerfiles, .env files, or Kubernetes manifests.\\n\\n<example>\\nContext: The user has just written a new HTTP handler that processes user input and queries a database.\\nuser: \"I've just finished writing the new user search handler in handlers/search.go\"\\nassistant: \"Great, let me review that for security issues.\"\\n<commentary>\\nSince new Go code handling user input and database queries was just written, proactively launch the go-security-reviewer agent to check for injection vulnerabilities, missing authentication, and other security risks.\\n</commentary>\\nassistant: \"I'll use the go-security-reviewer agent to analyze handlers/search.go for security vulnerabilities before we proceed.\"\\n</example>\\n\\n<example>\\nContext: The user has added a new dependency to go.mod and updated configuration files.\\nuser: \"I added the github.com/some/library package to go.mod and updated config.yaml with the new settings\"\\nassistant: \"I'll launch the go-security-reviewer agent to check the new dependency for known vulnerabilities and review the configuration changes for security risks.\"\\n<commentary>\\nDependency and configuration changes are high-risk moments. Use the go-security-reviewer agent to scan go.mod and config.yaml immediately.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user is implementing an authentication middleware.\\nuser: \"Can you review my auth middleware in middleware/auth.go?\"\\nassistant: \"Absolutely — I'll use the go-security-reviewer agent to perform a thorough security analysis of your authentication middleware.\"\\n<commentary>\\nAuthentication code is security-critical. Use the go-security-reviewer agent to verify access control, session validation, token handling, and absence of bypass vulnerabilities.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user has written a function that executes shell commands.\\nuser: \"Here's my command runner implementation in cmd/runner.go\"\\nassistant: \"Let me have the go-security-reviewer agent analyze this for command injection and unsafe API usage.\"\\n<commentary>\\nCode involving os/exec is a high-risk area. Immediately invoke the go-security-reviewer agent to detect command injection, unsafe input handling, and misuse of dangerous Go APIs.\\n</commentary>\\n</example>"
-model: sonnet
+tools: Bash, Glob, Grep, Read
+model: haiku
 color: blue
 memory: project
 ---
@@ -339,3 +340,15 @@ Memory is one of several persistence mechanisms available to you as you assist t
 ## MEMORY.md
 
 Your MEMORY.md is currently empty. When you save new memories, they will appear here.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "deepseek/deepseek-v3.2" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

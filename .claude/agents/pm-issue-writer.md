@@ -1,8 +1,8 @@
 ---
 name: pm-issue-writer
 description: Use when a user request, bug report, or feature brief needs to be translated into a precise, implementation-ready GitHub issue draft. Bridges intent and engineering execution by formalising requirements with RFC 2119 normative language. Produces issue draft text only — does not create GitHub issues directly. Invoke before /backlog when the requirement is ambiguous or informal.
-tools: Glob, Grep, Read, Write, WebSearch
-model: sonnet
+tools: Bash, Glob, Grep, Read, Write, WebSearch
+model: haiku
 color: pink
 ---
 
@@ -232,3 +232,15 @@ Build up knowledge across conversations — save recurring request patterns, con
 ## MEMORY.md
 
 Your MEMORY.md is at `.claude/agent-memory/MEMORY.md`. Read it at the start of each session to recall prior findings.
+
+## OpenRouter delegation (Pattern B)
+
+For cost-intensive analysis (large diffs, bulk file scans, structured output generation), delegate to OpenRouter instead of consuming Claude tokens. Use `lib/env.sh` and `lib/rest.sh` from `.claude/skills/lib/`:
+
+```bash
+source .claude/skills/lib/env.sh && source .claude/skills/lib/rest.sh
+load_env_key OPENROUTER_API_KEY
+CONTENT=$(openrouter_ask "google/gemini-2.5-flash" "$PROMPT")
+```
+
+Use when: the task fits in a single prompt (no multi-turn needed), input is under ~100 KB, and the result is structured text you can parse or return directly.

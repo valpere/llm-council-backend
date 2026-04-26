@@ -79,6 +79,12 @@
       "Bash(grep:*)",
       "Bash(make help:*)",
       "Bash(make check:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf*)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git checkout -- *)"
     ]
   },
   "hooks": {
