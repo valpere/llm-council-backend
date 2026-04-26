@@ -43,6 +43,14 @@ bin/
 
 data/
 
+# Self-learning pattern store (global gitignore has _* — explicitly opt in, then exclude raw logs)
+!_patterns/
+!_patterns/**
+!_knowledge-base/
+!_knowledge-base/**
+_patterns/mistakes.jsonl
+_patterns/wins.jsonl
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
