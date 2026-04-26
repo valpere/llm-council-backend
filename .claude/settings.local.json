@@ -81,6 +81,14 @@
       "Bash(make check:*)"
     ]
   },
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf*)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git checkout -- *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
