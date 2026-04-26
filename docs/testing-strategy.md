@@ -208,5 +208,5 @@ go test -race -count=1000 -v ./internal/council/ -run TestW_
 ## Related Documents
 
 - `docs/council-research-synthesis.md §8` — Go implementation patterns and interface design
-- `docs/council-research-gaps.md §4.4` — Infrastructure prerequisites (handler tests)
-- `docs/api-error-contract.md` — SSE error shapes that handler tests must verify
+- `docs/council-research-synthesis.md §12` — Infrastructure prerequisites (handler tests)
+- `docs/api.md` — SSE error shapes that handler tests must verify

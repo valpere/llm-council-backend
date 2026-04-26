@@ -37,22 +37,56 @@ Preflight `OPTIONS` requests return `204 No Content`.
 
 ---
 
-## Error format
+## Error reference
 
-All error responses share one shape:
+### Pre-SSE HTTP errors
+
+Returned before the SSE stream is established (before `Content-Type: text/event-stream`
+is written), so a proper HTTP status code is always possible.
+
+**Shape:**
 
 ```json
 { "error": "human-readable message" }
 ```
 
-Common status codes:
+| Failure | Status | `error` message |
+|---------|--------|----------------|
+| Invalid conversation ID format | `400` | `"invalid conversation id"` |
+| Malformed or missing request body | `400` | `"invalid request body"` |
+| Conversation not found | `404` | `"not found"` |
+| Council quorum not met | `503` | `"council quorum not met"` |
+| Storage failure (pre-pipeline) | `500` | `"internal server error"` |
+| SSE streaming not supported by server | `500` | `"streaming not supported"` |
 
-| Code | Meaning |
-|------|---------|
-| 400 | Invalid request body or malformed UUID path parameter |
-| 404 | Conversation not found |
-| 503 | Council quorum not met (too many models failed) |
-| 500 | Internal server error |
+### SSE error events
+
+Once SSE is established (HTTP `200`, `Content-Type: text/event-stream`), the HTTP
+status code is locked. Errors are communicated as SSE events; the stream terminates
+immediately after the error event. No `complete` event follows.
+
+**Shape:**
+
+```json
+{ "type": "error", "message": "human-readable message" }
+```
+
+| Failure | `message` |
+|---------|-----------|
+| Stage 1 quorum not met | `"council quorum not met"` |
+| Stage 3 Chairman LLM failure | `"internal server error"` |
+| Storage failure saving assistant message | `"internal server error"` |
+
+When Stage 1 returns fewer than M_min successful responses, the handler logs
+`Got`/`Need` at `WARN` level and emits the error event. No `stage2_complete` or
+`stage3_complete` events are emitted before it. The user message may already have
+been persisted; no assistant message is saved.
+
+### Partial results
+
+Not returned in the current implementation. On any pipeline failure the client
+receives only the SSE error event; no stage outputs from the failed run are
+persisted.
 
 ---
 
@@ -150,8 +184,7 @@ Fetch a conversation with its full message history.
 
 ### `POST /api/conversations/{id}/message`
 
-Send a message and receive the full deliberation result in a single JSON response
-(blocking — waits for all three stages to complete).
+Send a message and receive the full deliberation result in a single JSON response (blocking — waits for all three stages to complete).
 
 **Path parameter** — `id`: UUID v4.
 
@@ -402,3 +435,9 @@ Emitted when the pipeline fails. Stream ends after this event.
 |-------|------|-------------|
 | `model` | string | OpenRouter model ID |
 | `score` | number | Aggregate rank score (lower = ranked higher overall) |
+
+### `TitleData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | First 50 bytes of the Stage 3 response, used as the conversation title |
