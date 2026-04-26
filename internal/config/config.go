@@ -22,7 +22,7 @@ type Config struct {
 	DefaultCouncilChairmanModel string
 	DefaultCouncilTemperature   float64
 
-	// Stage 0 clarification loop. ClarificationMaxRounds == 0 disables the feature.
+	// Stage 0 clarification loop. ClarificationMaxRounds == 0 disables the feature (set CLARIFICATION_MAX_ROUNDS=0 to disable).
 	ClarificationMaxRounds            int
 	ClarificationMaxTotalQuestions    int
 	ClarificationMaxQuestionsPerRound int
@@ -93,7 +93,7 @@ func Load() (*Config, error) {
 		llmBaseURL = raw
 	}
 
-	clarificationMaxRounds := 0
+	clarificationMaxRounds := 2
 	if raw := os.Getenv("CLARIFICATION_MAX_ROUNDS"); raw != "" {
 		if v, err := strconv.Atoi(raw); err == nil {
 			clarificationMaxRounds = v
