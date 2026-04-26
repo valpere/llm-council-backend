@@ -2,7 +2,7 @@
 name: static-analysis
 description: "Use this agent when CI reports lint failures, a pull request fails vet or staticcheck, or after code generation produces new files. Runs `make lint` (go vet + staticcheck), classifies violations, and applies safe cosmetic fixes. Do NOT invoke when runtime bugs must be fixed, architecture refactors are required, or interface logic must be redesigned.\n\n<example>\nContext: The user has just run code generation and wants lint to pass before creating a PR.\nuser: \"I just generated new council methods. Can you make sure lint passes?\"\nassistant: \"I'll use the static-analysis agent to run the linter, classify violations, and apply safe cosmetic fixes.\"\n<commentary>\nAfter code generation, lint violations are common. Use the static-analysis agent to safely clean up cosmetic issues without touching runtime behavior.\n</commentary>\n</example>\n\n<example>\nContext: A developer is about to open a PR and CI is failing on lint.\nuser: \"My PR is blocked because staticcheck is failing.\"\nassistant: \"Let me launch the static-analysis agent to analyze and fix the lint violations.\"\n<commentary>\nLint failures blocking a PR are the primary trigger for the static-analysis agent.\n</commentary>\n</example>"
 tools: Glob, Grep, Read, Bash, Edit
-model: sonnet
+model: haiku
 color: white
 memory: project
 ---

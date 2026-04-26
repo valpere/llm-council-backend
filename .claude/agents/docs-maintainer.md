@@ -2,7 +2,7 @@
 name: docs-maintainer
 description: Use after significant changes are merged — new API endpoints, new interfaces, new config fields, new architectural patterns, or proposals resolved. Keeps docs/, CLAUDE.md, and .proposals.md accurate and consistent with the current codebase. Never modifies source code.
 tools: Bash, Glob, Grep, Read, Edit, Write
-model: sonnet
+model: haiku
 memory: project
 ---
 

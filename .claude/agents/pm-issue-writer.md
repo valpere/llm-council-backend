@@ -2,7 +2,7 @@
 name: pm-issue-writer
 description: Use when a user request, bug report, or feature brief needs to be translated into a precise, implementation-ready GitHub issue draft. Bridges intent and engineering execution by formalising requirements with RFC 2119 normative language. Produces issue draft text only — does not create GitHub issues directly. Invoke before /backlog when the requirement is ambiguous or informal.
 tools: Glob, Grep, Read, Write, WebSearch
-model: sonnet
+model: haiku
 color: pink
 ---
 

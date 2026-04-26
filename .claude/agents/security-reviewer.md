@@ -2,7 +2,7 @@
 name: security-reviewer
 description: Use when new code has been written or modified and needs a security audit before a PR is created. Analyzes source code for OWASP Top 10 vulnerabilities, XSS risks, injection vectors, hardcoded secrets, and insecure patterns. Report-only — never modifies code. Invoke proactively after implementing features that handle user input, render LLM output, or make API calls.
 tools: Glob, Grep, Read
-model: sonnet
+model: haiku
 color: blue
 ---
 
