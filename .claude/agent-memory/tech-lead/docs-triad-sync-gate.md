@@ -10,7 +10,7 @@ as a follow-up. Canonical target map (backend-only repo as of 2026-07-19):
 
 | Trigger | Must touch |
 |---|---|
-| new/changed strategy | `docs/strategies.md`, `docs/architecture-v2.md`, `CLAUDE.md` (if the strategy list/count is stated) |
+| new/changed strategy | `docs/strategies.md`, `docs/strategy-showcase.md`, `docs/architecture-v2.md`, `CLAUDE.md` (if the strategy list/count is stated) |
 | new/changed env var or `configs/council.yaml` key | `docs/architecture-v2.md`, `docs/user-guide.md`, `README.md` (if user-facing), `CLAUDE.md` |
 | REST/SSE wire-shape change | `docs/api.md` **and** `docs/openapi.yaml` (pair — never one alone), `docs/architecture-v2.md` |
 
