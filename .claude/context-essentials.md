@@ -37,9 +37,12 @@ This repo is the backend API only.
   not yet wired into code, prefix the section with `PLANNED:` or
   `NOT YET WIRED:`. Never write future-tense behaviour as if it were
   current. Recurring `/fix-review` theme — see dreaming W19 §2.
-- **Update `CLAUDE.md`, `architecture-v2.md`, `strategies.md`
-  together** when a feature lands. Drift between these three is the
-  most common review comment in this repo.
+- **Docs land in the same PR as the change, never a follow-up.** Which
+  docs depends on what changed: strategy → `strategies.md`,
+  `strategy-showcase.md`, `architecture-v2.md`; env var or
+  `configs/council.yaml` key → `architecture-v2.md`, `user-guide.md`,
+  `README.md`; REST/SSE shape → `api.md` **and** `openapi.yaml` (never
+  one alone). Update `CLAUDE.md` too if it states the changed fact.
 
 ## Banned patterns
 
