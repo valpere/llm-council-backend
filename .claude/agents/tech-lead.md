@@ -202,7 +202,7 @@ by a later dreaming pass. Full rationale: `.claude/agent-memory/tech-lead/docs-t
 
 | Trigger | Must touch |
 |---|---|
-| new/changed strategy | `docs/strategies.md`, `docs/architecture-v2.md`, `CLAUDE.md` if the strategy list/count is stated |
+| new/changed strategy | `docs/strategies.md`, `docs/strategy-showcase.md`, `docs/architecture-v2.md`, `CLAUDE.md` if the strategy list/count is stated |
 | new/changed env var or `configs/council.yaml` key | `docs/architecture-v2.md`, `docs/user-guide.md`, `README.md` if user-facing, `CLAUDE.md` |
 | REST/SSE wire-shape change | `docs/api.md` **and** `docs/openapi.yaml` (paired — narrative + machine contract, updating one alone is itself a drift bug), `docs/architecture-v2.md` |
 
