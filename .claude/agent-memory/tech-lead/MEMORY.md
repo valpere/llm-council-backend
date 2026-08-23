@@ -10,3 +10,4 @@
 - [review-verify-checked-out-branch.md](review-verify-checked-out-branch.md) — Confirm HEAD matches the branch named in a review request; use `git show <branch>:<file>`, not the working tree
 - [review-criteria-need-output-slot.md](review-criteria-need-output-slot.md) — New tech-lead.md criteria need a line in the printed Output format block + explicit blocking semantics
 - [prune-by-deletion-not-rewording.md](prune-by-deletion-not-rewording.md) — In cleanup sweeps, reworded lines are riskier than deleted ones; a dropped qualifier can invert a rule
+- [memory-edit-trailing-block-drift.md](memory-edit-trailing-block-drift.md) — After rewriting a memory's main content, re-scan the trailing Why/How-to-apply block — it's the most likely place to still contradict the new status
