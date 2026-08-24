@@ -16,5 +16,6 @@ Each entry below is a link to a memory file with a one-line description.
 - [frontend-prune-plan-corrections.md](frontend-prune-plan-corrections.md) — dreaming-sourced plans cite headings/steps that don't exist; verify every structural claim against the live file before approving
 - [code-generator/MEMORY.md](code-generator/MEMORY.md) — bootstrapped W32: no memories yet
 - [code-simplifier/MEMORY.md](code-simplifier/MEMORY.md) — bootstrapped W32: no memories yet
+- [sessions-db-growth-policy.md](sessions-db-growth-policy.md) — issue #344 resolved: no rotation policy adopted, growth is discrete per session-Stop event, not continuous — revisit only past ~500MB-1GB or an observed perf symptom
 
 <!-- Add pointers here as agents write memories. Keep under 200 lines. -->
