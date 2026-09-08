@@ -1,11 +1,20 @@
 ---
 name: frontend-extraction-stale-prompts
-description: After the 2026-07-19 frontend extraction, stale frontend content survives in 13 skill/agent prompt files — full inventory plus the grep hits that are legitimate and must NOT be pruned
+description: "HISTORICAL (sweep complete 2026-09-06) — full inventory of the 13+2 files the 2026-07-19 frontend-extraction cleanup covered, plus the grep hits that are legitimate and must NOT be pruned"
 type: project
 ---
 
+> **Status: SWEEP COMPLETE.** Verified 2026-09-06: `grep -rl frontend .claude/skills/*/SKILL.md`
+> returns zero hits; `grep -n frontend .claude/agents/*.md` returns only the one allowlisted
+> boilerplate example below; `.claude/plans/README.md`'s `frontend` component enum and
+> `.claude/hooks/eslint-fix.cjs` (both listed below as "missed by both sweeps") are confirmed
+> gone. Kept as the historical inventory record — if a future `.claude/` restructure
+> reintroduces frontend-shaped content, this file documents what "done" looked like and where
+> the two audits (dreaming W32, the 15-file sweep) both missed things the first time.
+
 `frontend/` was extracted to `vmm-rada-web-ui` on 2026-07-19; this repo is backend-only Go.
-Stale frontend content still lives in prompt files under `.claude/`. Inventory verified 2026-08-14.
+Stale frontend content lived in prompt files under `.claude/` until the sweep above completed.
+Inventory as originally verified 2026-08-14 (all items below are now resolved):
 
 **Why:** A "prune stale frontend refs" sweep keeps recurring because each pass finds only a
 subset. Two of these files (`ci-build-agent.md`, `static-analysis.md`, `ship/SKILL.md`,
