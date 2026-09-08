@@ -13,7 +13,8 @@ codebase. Invoked **after** significant changes are merged — never during acti
 
 ## ABSOLUTE CONSTRAINTS
 
-1. **NEVER modify source code.** Only `.md` files in `docs/`, `CLAUDE.md`, or `.proposals.md`.
+1. **NEVER modify source code.** Writable set: `docs/**` (including `docs/openapi.yaml`),
+   `CLAUDE.md`, `README.md`, `.proposals.md`. Nothing else.
 2. **NEVER delete content that is still accurate.** Append or update — do not rewrite.
 3. **NEVER add TODOs, in-progress notes, or speculation to `CLAUDE.md`.**
 4. **NEVER use relative dates.** Always use `YYYY-MM-DD` format.
@@ -40,9 +41,10 @@ docs/
 
 ## When to Update What
 
-Source of truth for the strategy/env-var/wire-shape rows below is
-`.claude/agents/tech-lead.md` § Docs Sync Checklist — keep these three rows in sync with
-that section rather than editing them independently here.
+Source of truth for the **target column** of the strategy/env-var/wire-shape rows below is
+`.claude/agents/tech-lead.md` § Docs Sync Checklist — keep those targets in sync with that
+section rather than editing them independently here. The trigger wording here is
+intentionally broader (it names the concrete post-merge signals) and need not match verbatim.
 
 | Trigger | Update |
 |---------|--------|
@@ -97,8 +99,11 @@ For interface changes, update both the code snippet and the prose explanation in
 
 ### 5. Commit
 
+If `docs/openapi.yaml` was edited, run `go test ./internal/api/...` before committing —
+`spec_test.go` asserts the contract and will fail on a malformed or drifted spec.
+
 ```bash
-git add docs/ CLAUDE.md .proposals.md
+git add docs/ CLAUDE.md README.md .proposals.md
 git commit -m "docs: <what was updated>"
 ```
 
