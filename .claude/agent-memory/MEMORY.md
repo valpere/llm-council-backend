@@ -12,7 +12,7 @@ Each entry below is a link to a memory file with a one-line description.
 
 - [rolebased-strategy-orphan.md](rolebased-strategy-orphan.md) — HISTORICAL: RoleBased resolved (registered standalone, extraction-into-MoA overruled); see project_architecture.md for current shape
 
-- [frontend-extraction-stale-prompts.md](frontend-extraction-stale-prompts.md) — 13 prompt files still carry post-extraction frontend drift; plus the 5 grep hits that are legitimate and must not be pruned
+- [frontend-extraction-stale-prompts.md](frontend-extraction-stale-prompts.md) — HISTORICAL: sweep complete 2026-09-06, kept as inventory record; the 1 remaining grep hit is legitimate and must not be pruned
 - [frontend-prune-plan-corrections.md](frontend-prune-plan-corrections.md) — dreaming-sourced plans cite headings/steps that don't exist; verify every structural claim against the live file before approving
 - [code-generator/MEMORY.md](code-generator/MEMORY.md) — bootstrapped W32: no memories yet
 - [code-simplifier/MEMORY.md](code-simplifier/MEMORY.md) — bootstrapped W32: no memories yet
