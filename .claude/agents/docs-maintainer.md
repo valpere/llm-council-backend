@@ -24,26 +24,38 @@ codebase. Invoked **after** significant changes are merged — never during acti
 ```
 CLAUDE.md                         ← project-wide: commands, architecture summary, workflow
 docs/
-├── architecture.md               ← system overview, components, design decisions
-├── go-implementation.md          ← package structure, implementation details, config
-├── council-stages.md             ← detailed stage logic and anonymization
+├── architecture-v2.md            ← package layout, layer boundaries, composition root, Rada pipeline/strategy dispatch
+├── api.md                        ← REST + SSE narrative reference (paired with openapi.yaml)
+├── openapi.yaml                  ← OpenAPI 3.2 machine-readable contract (paired with api.md)
+├── pipeline.md                   ← Stage 0/1/2/3 internals per strategy
+├── strategies.md                 ← the 7 deliberation strategies, per-strategy config
+├── strategy-showcase.md          ← test prompts per strategy
+├── user-guide.md                 ← end-user reference + Configuration section
+├── requirements.md               ← requirements & use cases
+├── testing-strategy.md           ← test approach
+├── council-research-synthesis.md ← aggregated design research; § 12 has design-decision rationale
+├── backlog-eval.md               ← SUPERSEDED/historical — do not "correct" against internal/eval/
 .proposals.md                     ← active proposals and past decisions
 ```
 
 ## When to Update What
 
+Source of truth for the strategy/env-var/wire-shape rows below is
+`.claude/agents/tech-lead.md` § Docs Sync Checklist — keep these three rows in sync with
+that section rather than editing them independently here.
+
 | Trigger | Update |
 |---------|--------|
-| New API endpoint or changed status code | `docs/architecture.md` (API table) |
-| New/changed SSE event type or payload | `docs/architecture.md` (SSE section), `go-implementation.md` |
-| New config field / env var | `docs/go-implementation.md` (Config section) |
-| New package file or renamed file | `docs/go-implementation.md` (Package Structure) |
-| New interface defined | `docs/go-implementation.md` (Interfaces section) |
-| New design decision adopted | `docs/architecture.md` (Key Design Decisions) |
-| Stage logic changed | `docs/council-stages.md` |
+| New/changed deliberation strategy | `docs/strategies.md`, `docs/strategy-showcase.md`, `docs/architecture-v2.md`, `CLAUDE.md` if the strategy list/count is stated |
+| New/changed env var or `configs/council.yaml` key | `docs/architecture-v2.md`, `docs/user-guide.md`, `README.md` if user-facing, `CLAUDE.md` |
+| REST/SSE wire-shape change (endpoint, status code, or event type/payload) | `docs/api.md` **and** `docs/openapi.yaml` (paired — narrative + machine contract, updating one alone is itself a drift bug), `docs/architecture-v2.md` |
+| New package file or renamed file | `docs/architecture-v2.md` § Package layout |
+| New interface defined | `docs/architecture-v2.md` § Layer boundaries |
+| Design decision adopted (reflected in shipped structure/behaviour) | `docs/architecture-v2.md` (the relevant existing section for what changed) |
+| Design decision's rationale | `docs/council-research-synthesis.md` § 12 Implementation Design Decisions |
+| Stage logic changed | `docs/pipeline.md` (the relevant Stage N section); also `docs/architecture-v2.md` § Rada pipeline if strategy dispatch, the `Strategy` enum, or `CouncilType` fields changed |
 | New `make` target added | `CLAUDE.md` (Development section) |
 | Proposal moved from idea → implemented | `.proposals.md` (add decision note) |
-| SSE event added or renamed | `docs/architecture.md` (SSE section) |
 
 ## Procedure
 
@@ -65,16 +77,23 @@ Never assume docs are correct — always verify against the source.
 
 Make targeted edits. Preserve existing structure. Update only what has changed.
 
-For package structure changes, regenerate the tree to match the actual file layout.
-For config changes, update the struct block and the env var table together.
-For interface changes, update both the code snippet and the prose explanation.
+For package structure changes, update the Package layout table (`docs/architecture-v2.md`
+§ Package layout) to match `internal/*/`.
+For config changes, update `docs/user-guide.md` § Configuration and `docs/strategies.md`
+§ Per-strategy configuration together, against `internal/config/config.go` /
+`configs/council.yaml`.
+For interface changes, update both the code snippet and the prose explanation in
+`docs/architecture-v2.md` § Layer boundaries.
 
 ### 4. Check for cross-doc consistency
 
-- API table in `architecture.md` must match routes in `handler.go`
-- Config struct in `go-implementation.md` must match `config.go`
-- Package tree in `go-implementation.md` must match `internal/*/` layout
-- SSE events in `architecture.md` must match what `sendMessageStream` actually sends
+- Routes table in `docs/api.md` § Routes, and `docs/openapi.yaml`, must match routes in
+  `internal/api/handler.go`
+- Config in `docs/user-guide.md` § Configuration and `docs/strategies.md` § Per-strategy
+  configuration must match `internal/config/config.go` / `configs/council.yaml`
+- Package layout table in `docs/architecture-v2.md` must match `internal/*/` layout
+- SSE events in `docs/api.md` § SSE event sequence, and `docs/openapi.yaml`, must match
+  what `sendMessageStream` (`internal/api/handler.go`) actually sends
 
 ### 5. Commit
 

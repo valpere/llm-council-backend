@@ -15,24 +15,25 @@ as a follow-up. Canonical target map (backend-only repo as of 2026-07-19):
 | REST/SSE wire-shape change | `docs/api.md` **and** `docs/openapi.yaml` (pair — never one alone), `docs/architecture-v2.md` |
 
 **Why:** docs-only drift-repair PRs are a recurring line item (#304, #327 among the last
-8 merges). Dreaming 2026-W32 §1 classified this as structural, not incidental. `docs/`
-files that no longer exist are still named in `.claude/agents/docs-maintainer.md`
-(`architecture.md`, `go-implementation.md`, `council-stages.md`, `docs/frontend/`) — the
-agent nominally responsible for doc sync has a stale map, so post-merge cleanup cannot be
-relied on. `docs/openapi.yaml` drift is partially machine-caught by
-`internal/api/spec_test.go`, but only for the assertions that test already makes.
+8 merges). Dreaming 2026-W32 §1 classified this as structural, not incidental.
+`docs/openapi.yaml` drift is partially machine-caught by `internal/api/spec_test.go`, but
+only for the assertions that test already makes.
 
 **How to apply:** At *plan review*, require the plan's Files-to-change list to name the
 docs above, or an explicit "docs: N/A — <reason>". At *code review*, check the diff.
 Keep the trigger narrow: pure internal refactors, test-only, and dependency PRs are
 exempt — do not turn this into a blanket "every PR touches docs" tax.
 
-**Status 2026-08-15:** shipped into `.claude/agents/tech-lead.md` via issue #334 —
-plan-review criterion 6 (plan-time wording) + a `## Docs Sync Checklist` section
-(diff-time wording). `backlog/SKILL.md` deliberately not touched. The map now exists in
-*two* agent prompts: tech-lead's (current) and `docs-maintainer.md`'s (stale — still
-routes to `docs/architecture.md`, `go-implementation.md`, `council-stages.md`, none of
-which exist). Treat tech-lead's map as canonical until docs-maintainer is fixed.
+**Status 2026-09-06:** shipped into `.claude/agents/tech-lead.md` via issue #334
+(2026-08-15) — plan-review criterion 6 (plan-time wording) + a `## Docs Sync Checklist`
+section (diff-time wording). `backlog/SKILL.md` deliberately not touched.
+`docs-maintainer.md`'s own copy of this map (and its broader doc-routing table beyond
+just the strategy/env-var/wire-shape triad) was fixed 2026-09-06 (issue #351, flagged by
+three consecutive dreaming passes W34/W35/W36) — it now points at real `docs/` files and
+section headings, with an explicit note that the triad rows are sourced from this file's
+map in `tech-lead.md` and must be kept in sync with it, not edited independently. The map
+now correctly exists in exactly two places by design (plan/code review gate in
+`tech-lead.md`; post-merge cleanup routing in `docs-maintainer.md`), not by drift.
 
 Related: [[governance-enforcement-point]] (this gate lives in `tech-lead.md`, not
 `backlog/SKILL.md`), [[review-criteria-need-output-slot]] (the mechanical follow-ons any
