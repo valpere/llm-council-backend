@@ -53,14 +53,20 @@ Write the report to stdout."
 
 # Prompt via stdin — `--allowed-tools <tools...>` is variadic and would
 # otherwise consume the positional prompt argument.
-echo "$PROMPT" | claude \
+# `if` guards the pipeline so `set -e` doesn't abort the script right
+# here on a non-zero claude exit — a bare `cmd; EXIT=$?` line under
+# errexit never reaches the EXIT=$? assignment; the whole error-handling
+# block below it becomes dead code exactly when it's needed.
+if echo "$PROMPT" | claude \
   --print \
   --model minimax-m3:cloud \
   --fallback-model kimi-k2.7-code:cloud \
   --allowed-tools "Read,Glob,Grep,Bash(ls:*),Bash(cat:*),Bash(wc:*),Bash(stat:*),Bash(find:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git rev-parse:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue list:*)" \
-  > "$REPORT" 2>> "$LOG"
-
-EXIT=$?
+  > "$REPORT" 2>> "$LOG"; then
+  EXIT=0
+else
+  EXIT=$?
+fi
 echo "[$(date -Iseconds)] vmm-rada dreaming finished (exit=$EXIT, report=$REPORT)" >> "$LOG"
 
 if [[ $EXIT -ne 0 ]]; then
